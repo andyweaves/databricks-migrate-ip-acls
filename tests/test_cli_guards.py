@@ -856,3 +856,62 @@ def test_expired_reauths_profile_named_in_error_not_assumed(monkeypatch):
     acc = cli._account_client_or_exit(Connection(profile="sfe-foghorn"))
     assert acc is sentinel
     assert ran["argv"] == ["databricks", "auth", "login", "--profile", "sfe-account"]
+
+
+# --- --export overwrite guard ------------------------------------------------------------------
+
+
+def test_write_json_export_confirm_declined_keeps_existing_file(monkeypatch, tmp_path):
+    dest = tmp_path / "p.json"
+    dest.write_text("ORIGINAL", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: False)  # decline overwrite
+    result = cli._write_json_export(str(dest), {"network_policy_id": "p"}, yes=False)
+    assert result is None
+    assert dest.read_text(encoding="utf-8") == "ORIGINAL"  # untouched
+
+
+def test_write_json_export_confirm_accepted_overwrites(monkeypatch, tmp_path):
+    import json
+
+    dest = tmp_path / "p.json"
+    dest.write_text("ORIGINAL", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: True)  # accept overwrite
+    result = cli._write_json_export(str(dest), {"network_policy_id": "p"}, yes=False)
+    assert result == str(dest)
+    assert json.loads(dest.read_text(encoding="utf-8"))["network_policy_id"] == "p"
+
+
+def test_write_json_export_yes_overwrites_without_prompt(monkeypatch, tmp_path):
+    dest = tmp_path / "p.json"
+    dest.write_text("ORIGINAL", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        "typer.confirm",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not prompt with --yes")),
+    )
+    assert cli._write_json_export(str(dest), {"network_policy_id": "p"}, yes=True) == str(dest)
+
+
+def test_write_tf_export_confirm_declined_keeps_existing_file(monkeypatch, tmp_path):
+    dest = tmp_path / "p.tf"
+    dest.write_text("ORIGINAL", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: False)
+    # pass the .tf path (writer applies .with_suffix('.tf') -> same file)
+    result = cli._write_tf_export(str(dest), {"network_policy_id": "p"}, yes=False)
+    assert result is None
+    assert dest.read_text(encoding="utf-8") == "ORIGINAL"
+
+
+def test_write_export_noninteractive_overwrites_silently(monkeypatch, tmp_path):
+    # non-interactive (no TTY) must overwrite without prompting, for scripted runs.
+    dest = tmp_path / "p.json"
+    dest.write_text("ORIGINAL", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    monkeypatch.setattr(
+        "typer.confirm",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not prompt non-interactively")),
+    )
+    assert cli._write_json_export(str(dest), {"network_policy_id": "p"}, yes=False) == str(dest)

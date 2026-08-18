@@ -396,10 +396,23 @@ def _acl_preflight(account, workspace_id, will_assign: bool, yes: bool) -> None:
     raise typer.Exit(code=0)
 
 
-def _write_json_export(path: str, payload: dict) -> str:
-    """Write `payload` as pretty JSON to `path`, and return the final path written.
-    If `path` is a directory (or ends with a separator), write `<network_policy_id>.json` inside it;
-    create missing parent dirs; and turn write failures into a clean error instead of a traceback."""
+def _confirm_overwrite(dest, yes: bool) -> bool:
+    """True if it's OK to write `dest`. A new file: always. An existing file: overwrite silently
+    with --yes / non-interactively (for scripting), otherwise prompt (default No)."""
+    import sys
+
+    if not dest.exists():
+        return True
+    if yes or not sys.stdin.isatty():
+        return True
+    return typer.confirm(typer.style(f"'{dest}' already exists — overwrite?", fg="yellow"), default=False)
+
+
+def _write_json_export(path: str, payload: dict, yes: bool = False) -> str | None:
+    """Write `payload` as pretty JSON to `path`, and return the final path written (or None if an
+    existing file was kept). If `path` is a directory (or ends with a separator), write
+    `<network_policy_id>.json` inside it; create missing parent dirs; and turn write failures into a
+    clean error instead of a traceback."""
     import json
     import os
     from pathlib import Path
@@ -408,6 +421,9 @@ def _write_json_export(path: str, payload: dict) -> str:
     if dest.is_dir() or path.endswith(("/", os.sep)):
         name = payload.get("network_policy_id") or "network-policy"
         dest = dest / f"{name}.json"
+    if not _confirm_overwrite(dest, yes):
+        console.banner("info", f"Kept existing '{dest}' — not overwritten.")
+        return None
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         # Pin UTF-8 so a non-ASCII rule label writes identically on macOS and Windows (whose default
@@ -420,9 +436,10 @@ def _write_json_export(path: str, payload: dict) -> str:
     return str(dest)
 
 
-def _write_tf_export(path: str, payload: dict) -> str:
-    """Write a best-effort Terraform config for `payload` alongside the JSON, and return the path.
-    A directory writes `<network_policy_id>.tf` inside it; a file path takes a `.tf` suffix."""
+def _write_tf_export(path: str, payload: dict, yes: bool = False) -> str | None:
+    """Write a best-effort Terraform config for `payload` alongside the JSON, and return the path (or
+    None if an existing file was kept). A directory writes `<network_policy_id>.tf` inside it; a file
+    path takes a `.tf` suffix."""
     import os
     from pathlib import Path
 
@@ -434,6 +451,9 @@ def _write_tf_export(path: str, payload: dict) -> str:
         dest = dest / f"{name}.tf"
     else:
         dest = dest.with_suffix(".tf")
+    if not _confirm_overwrite(dest, yes):
+        console.banner("info", f"Kept existing '{dest}' — not overwritten.")
+        return None
     try:
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(terraform.network_policy_hcl(payload), encoding="utf-8")
@@ -443,13 +463,20 @@ def _write_tf_export(path: str, payload: dict) -> str:
     return str(dest)
 
 
-def _export_policy(path: str, payload: dict) -> None:
-    """Write the proposed policy as both JSON (curl / REST body) and best-effort Terraform."""
-    json_dest = _write_json_export(path, payload)
-    tf_dest = _write_tf_export(path, payload)
-    console.banner(
-        "success", f"Wrote proposed network-policy JSON to {json_dest} and Terraform to {tf_dest}."
-    )
+def _export_policy(path: str, payload: dict, yes: bool = False) -> None:
+    """Write the proposed policy as both JSON (curl / REST body) and best-effort Terraform. An
+    existing file is only overwritten after confirmation (or with --yes)."""
+    json_dest = _write_json_export(path, payload, yes)
+    tf_dest = _write_tf_export(path, payload, yes)
+    if json_dest and tf_dest:
+        console.banner(
+            "success",
+            f"Wrote proposed network-policy JSON to {json_dest} and Terraform to {tf_dest}.",
+        )
+    elif json_dest:
+        console.banner("success", f"Wrote proposed network-policy JSON to {json_dest}.")
+    elif tf_dest:
+        console.banner("success", f"Wrote proposed network-policy Terraform to {tf_dest}.")
 
 
 def _note_policy_name(policy_name: str) -> None:
@@ -722,7 +749,7 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     render.acl_disabled_notice(analysis)  # below [old]/[new], before create: vet disabled rules
 
     if cfg.export:
-        _export_policy(cfg.export, acl_core.policy_payload(analysis, cfg, conn.account_id))
+        _export_policy(cfg.export, acl_core.policy_payload(analysis, cfg, conn.account_id), yes)
 
     # The responsibility warning sits directly before the write gate (or the propose-only exit), just
     # after the export log — the last thing shown before you decide to create/apply.
