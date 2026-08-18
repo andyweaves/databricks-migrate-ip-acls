@@ -30,7 +30,9 @@ dbx-migrate-ip-acls = "dbx_migrate_ip_acls.cli:app"
 [dependency-groups]
 dev = [
     "pytest>=8.0.0",
+    "pytest-cov>=5.0.0",
     "ruff>=0.6.0",
+    "black>=24.0.0",
 ]
 
 [build-system]
@@ -48,5 +50,16 @@ target-version = "py310"
 select = ["E", "F", "I", "W", "UP", "B"]
 ignore = ["B008"]  # typer uses function-call defaults (Option/Argument) by design
 
+[tool.black]
+line-length = 110
+target-version = ["py310"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["dbx_migrate_ip_acls"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true

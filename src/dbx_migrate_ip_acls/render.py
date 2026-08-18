@@ -14,30 +14,41 @@ from .config import AclConfig
 
 # ------------------------------------------------------------------------------------- decisions
 def acl_decisions(cfg: AclConfig) -> None:
-    console.decisions_panel("IP ACL → CBI migration configuration", [
-        ("policy_mode", cfg.policy_mode, "enforce (default) or dry_run."),
-        ("policy_name", cfg.policy_name, "Policy id for the new policy (from --policy-name / prompt)."),
-        ("auto_assign", cfg.auto_assign, "Bind this workspace to the new policy."),
-        ("disable_existing_ip_acls", cfg.disable_existing_ip_acls,
-         "After apply, turn off the workspace's IP access lists (needs create + assign)."),
-        ("export", cfg.export,
-         "Path to write the proposed policy as JSON + Terraform (.tf); '.' = current directory."),
-        ("create_policy", cfg.create_policy, "Master switch: nothing is written unless true."),
-    ])
+    console.decisions_panel(
+        "IP ACL → CBI migration configuration",
+        [
+            ("policy_mode", cfg.policy_mode, "enforce (default) or dry_run."),
+            ("policy_name", cfg.policy_name, "Policy id for the new policy (from --policy-name / prompt)."),
+            ("auto_assign", cfg.auto_assign, "Bind this workspace to the new policy."),
+            (
+                "disable_existing_ip_acls",
+                cfg.disable_existing_ip_acls,
+                "After apply, turn off the workspace's IP access lists (needs create + assign).",
+            ),
+            (
+                "export",
+                cfg.export,
+                "Path to write the proposed policy as JSON + Terraform (.tf); '.' = current directory.",
+            ),
+            ("create_policy", cfg.create_policy, "Master switch: nothing is written unless true."),
+        ],
+    )
 
 
 # ---------------------------------------------------------------------------------- acl tables
 def _acl_table(rows: list[dict], title: str) -> None:
     console.dataframe(
-        pd.DataFrame([{**a, "ip_addresses": ", ".join(a["ip_addresses"])} for a in rows]), title)
+        pd.DataFrame([{**a, "ip_addresses": ", ".join(a["ip_addresses"])} for a in rows]), title
+    )
 
 
 def acl_current_config(analysis) -> None:
     """The workspace's *current* IP access list configuration — all lists, enabled and disabled —
     shown when the workspace toggle is off so the user sees what they'd be enabling."""
     console.rule("Current IP access list configuration")
-    rows = ([{**a, "enabled": True} for a in analysis.ip_acls]
-            + [{**a, "enabled": False} for a in analysis.disabled_acls])
+    rows = [{**a, "enabled": True} for a in analysis.ip_acls] + [
+        {**a, "enabled": False} for a in analysis.disabled_acls
+    ]
     if rows:
         _acl_table(rows, f"IP access lists on workspace {analysis.workspace_id}")
 
@@ -56,16 +67,20 @@ def acl_disabled_notice(analysis) -> None:
     if not analysis.disabled_acls:
         return
     names = ", ".join(a["label"] for a in analysis.disabled_acls)
-    console.banner("warn", f"{len(analysis.disabled_acls)} rule(s) are disabled in IP access lists "
-                           f"and were NOT migrated: {names}. Make sure you vet these rules — if any "
-                           "should be enabled, exit this tool, enable them, and run the migration "
-                           "again.")
+    console.banner(
+        "warn",
+        f"{len(analysis.disabled_acls)} rule(s) are disabled in IP access lists "
+        f"and were NOT migrated: {names}. Make sure you vet these rules — if any "
+        "should be enabled, exit this tool, enable them, and run the migration "
+        "again.",
+    )
 
 
 def acl_preview(preview: dict, cfg: AclConfig) -> None:
     console.rule("Proposed policy — JSON preview")
-    console.banner("warn", "Please review the proposed context-based ingress policy carefully "
-                           "before applying.")
+    console.banner(
+        "warn", "Please review the proposed context-based ingress policy carefully " "before applying."
+    )
     console.json_panel(f"`{cfg.policy_mode_target}` block", preview)
 
 

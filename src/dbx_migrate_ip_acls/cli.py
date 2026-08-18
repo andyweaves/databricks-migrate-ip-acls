@@ -23,13 +23,15 @@ from .config import (
 )
 
 app = typer.Typer(
-    add_completion=False, rich_markup_mode="rich",
+    add_completion=False,
+    rich_markup_mode="rich",
     help="Migrate this workspace's IP access list into a context-based ingress (CBI) network policy.",
 )
 
 
 class Mode(str, Enum):
-    dry_run = "dry_run"; enforce = "enforce"  # noqa: E702
+    dry_run = "dry_run"
+    enforce = "enforce"  # noqa: E702
 
 
 def _available_profiles() -> list[str]:
@@ -68,15 +70,19 @@ def _resolve_profile(profile: str | None) -> str | None:
     if not profiles:
         raise typer.BadParameter(
             "No --profile given and no profiles found in ~/.databrickscfg. Pass --profile <name> "
-            "or run `databricks auth login` first.")
+            "or run `databricks auth login` first."
+        )
     if not sys.stdin.isatty():
         raise typer.BadParameter(
             "No --profile given (non-interactive). Pass --profile <name> explicitly — the CLI won't "
-            f"guess. Available: {', '.join(profiles)}")
+            f"guess. Available: {', '.join(profiles)}"
+        )
 
     import questionary
+
     choice = questionary.select(
-        "Which Databricks profile? (pass --profile to skip this prompt)", choices=profiles).ask()
+        "Which Databricks profile? (pass --profile to skip this prompt)", choices=profiles
+    ).ask()
     if not choice:
         raise typer.Abort()
     return choice
@@ -84,8 +90,12 @@ def _resolve_profile(profile: str | None) -> str | None:
 
 def _conn(profile, account_id, account_host, account_profile=None) -> Connection:
     profile = _resolve_profile(profile)
-    return Connection(profile=profile, account_id=account_id or "", account_host=account_host,
-                      account_profile=account_profile)
+    return Connection(
+        profile=profile,
+        account_id=account_id or "",
+        account_host=account_host,
+        account_profile=account_profile,
+    )
 
 
 def _ensure_account_id(conn: Connection, reason: str) -> None:
@@ -96,12 +106,14 @@ def _ensure_account_id(conn: Connection, reason: str) -> None:
 
     if conn.account_id:
         return
-    msg = (f"{reason} needs a Databricks account_id (numeric). Find it in the Account console "
-           "top-right user menu, or in the account-console URL after '/account/'.")
+    msg = (
+        f"{reason} needs a Databricks account_id (numeric). Find it in the Account console "
+        "top-right user menu, or in the account-console URL after '/account/'."
+    )
     if not sys.stdin.isatty():
-        raise typer.BadParameter(
-            f"{msg}\nPass --account-id <id> (non-interactive, so the CLI can't prompt).")
+        raise typer.BadParameter(f"{msg}\nPass --account-id <id> (non-interactive, so the CLI can't prompt).")
     import questionary
+
     console.banner("info", msg)
     entered = (questionary.text("Databricks account_id:").ask() or "").strip()
     if not entered:
@@ -115,9 +127,12 @@ def _profile_config_error(e: Exception, profile: str | None, flag: str) -> None:
     msg = str(e)
     if profile and "profile configured" in msg:
         available = ", ".join(_available_profiles()) or "(none found)"
-        console.banner("danger", f"{flag} '{profile}' isn't configured in your Databricks config "
-                                 "(~/.databrickscfg or $DATABRICKS_CONFIG_FILE). Available profiles: "
-                                 f"{available}. Fix the name or run `databricks auth login`.")
+        console.banner(
+            "danger",
+            f"{flag} '{profile}' isn't configured in your Databricks config "
+            "(~/.databrickscfg or $DATABRICKS_CONFIG_FILE). Available profiles: "
+            f"{available}. Fix the name or run `databricks auth login`.",
+        )
     else:
         console.banner("danger", f"Couldn't initialise the Databricks client: {msg}")
     raise typer.Exit(code=1) from None
@@ -127,8 +142,12 @@ def _is_expired_auth(msg: str) -> bool:
     """True if an SDK auth error looks like expired / invalid Databricks-CLI credentials that a
     `databricks auth login` would fix — as opposed to a mistyped profile or missing config."""
     m = msg.lower()
-    return ("reauthenticate" in m or "refresh token" in m or "cannot get access token" in m
-            or "databricks auth login" in m)
+    return (
+        "reauthenticate" in m
+        or "refresh token" in m
+        or "cannot get access token" in m
+        or "databricks auth login" in m
+    )
 
 
 def _reauth_profile(msg: str, fallback: str | None) -> str | None:
@@ -153,20 +172,24 @@ def _reauthenticate(profile: str) -> bool:
     import sys
 
     cmd = f"databricks auth login --profile {profile}"
-    console.banner("warn", f"The credentials for profile '{profile}' have expired (or its refresh "
-                           "token is invalid).")
+    console.banner(
+        "warn", f"The credentials for profile '{profile}' have expired (or its refresh " "token is invalid)."
+    )
     if not sys.stdin.isatty():
         console.banner("info", f"Re-authenticate, then re-run: {cmd}")
         return False
     if not typer.confirm(
-            typer.style(f"Re-authenticate now? This runs `{cmd}` and opens a browser.", fg="yellow"),
-            default=True):
+        typer.style(f"Re-authenticate now? This runs `{cmd}` and opens a browser.", fg="yellow"), default=True
+    ):
         console.banner("info", f"Re-authenticate when ready, then re-run: {cmd}")
         return False
     if shutil.which("databricks") is None:
-        console.banner("danger", "The `databricks` CLI isn't on your PATH — install it "
-                                 "(https://docs.databricks.com/dev-tools/cli/install), then run: "
-                                 f"{cmd}")
+        console.banner(
+            "danger",
+            "The `databricks` CLI isn't on your PATH — install it "
+            "(https://docs.databricks.com/dev-tools/cli/install), then run: "
+            f"{cmd}",
+        )
         return False
     console.banner("info", f"Running `{cmd}` …")
     try:
@@ -175,8 +198,11 @@ def _reauthenticate(profile: str) -> bool:
         console.banner("danger", f"Couldn't launch the databricks CLI: {e}. Run manually: {cmd}")
         return False
     if result.returncode != 0:
-        console.banner("danger", f"Re-authentication didn't complete (exit {result.returncode}). "
-                                 f"Run it manually, then re-run: {cmd}")
+        console.banner(
+            "danger",
+            f"Re-authentication didn't complete (exit {result.returncode}). "
+            f"Run it manually, then re-run: {cmd}",
+        )
         return False
     console.banner("success", "Re-authenticated — continuing.")
     return True
@@ -204,6 +230,7 @@ def _workspace_client_or_exit(conn: Connection):
     """Build the workspace client, converting a config/profile ValueError into a clean CLI error
     (and offering re-auth on expired credentials)."""
     from . import auth
+
     return _client_or_exit(lambda: auth.workspace_client(conn), conn.profile, "--profile")
 
 
@@ -211,10 +238,12 @@ def _account_client_or_exit(conn: Connection):
     """Build the account client, converting a config/profile ValueError into a clean CLI error
     (and offering re-auth on expired credentials)."""
     from . import auth
+
     return _client_or_exit(
         lambda: auth.account_client(conn),
         conn.account_profile or conn.profile,
-        "--account-profile" if conn.account_profile else "--profile")
+        "--account-profile" if conn.account_profile else "--profile",
+    )
 
 
 def _confirm_workspace(conn: Connection, yes: bool):
@@ -236,9 +265,7 @@ def _confirm_workspace(conn: Connection, yes: bool):
     console.workspace_panel(conn.profile or "env / OAuth", host, ws_id)
     if yes or not sys.stdin.isatty():
         return wc
-    if not typer.confirm(
-            typer.style("Is this the correct workspace to migrate?", fg="yellow"),
-            default=True):
+    if not typer.confirm(typer.style("Is this the correct workspace to migrate?", fg="yellow"), default=True):
         console.banner("info", "Aborted — re-run with the intended --profile.")
         raise typer.Exit(code=0)
     return wc
@@ -248,6 +275,7 @@ def _resolve_policy_name(cfg, conn: Connection, wc, yes: bool) -> None:
     """Resolve the policy name once. An explicit --policy-name is kept as-is; otherwise prompt for
     one (blank = the profile name, falling back to the workspace id). Mutates cfg.policy_name."""
     import sys
+
     if cfg.policy_name:
         return
     if getattr(getattr(cfg, "apply", None), "policy_action", "create_new") == "add_to_existing":
@@ -261,8 +289,10 @@ def _resolve_policy_name(cfg, conn: Connection, wc, yes: bool) -> None:
         cfg.policy_name = default
         return
     import questionary
-    entered = (questionary.text(
-        f"Policy name for the new network policy? (blank = use '{default}')").ask() or "").strip()
+
+    entered = (
+        questionary.text(f"Policy name for the new network policy? (blank = use '{default}')").ask() or ""
+    ).strip()
     cfg.policy_name = entered or default
 
 
@@ -285,25 +315,37 @@ def _acl_preflight(account, workspace_id, will_assign: bool, yes: bool) -> None:
 
     pas = acl_core.workspace_pas_attached(account, workspace_id)
     if pas is True:
-        console.banner("danger", "This workspace has a Private Access Settings (PAS) object attached "
-                                 "(PrivateLink). Migrating a PAS/PrivateLink workspace to CBI is NOT "
-                                 "supported yet - aborting.")
+        console.banner(
+            "danger",
+            "This workspace has a Private Access Settings (PAS) object attached "
+            "(PrivateLink). Migrating a PAS/PrivateLink workspace to CBI is NOT "
+            "supported yet - aborting.",
+        )
         raise typer.Exit(code=1)
     if pas is None:
-        console.banner("warn", "Couldn't verify whether a PAS/PrivateLink is attached (account read "
-                               "failed). If this workspace uses PrivateLink, migration is NOT "
-                               "supported yet.")
+        console.banner(
+            "warn",
+            "Couldn't verify whether a PAS/PrivateLink is attached (account read "
+            "failed). If this workspace uses PrivateLink, migration is NOT "
+            "supported yet.",
+        )
 
     vpce = acl_core.workspace_vpc_endpoint_count(account, workspace_id)
     if vpce:
-        console.banner("danger", f"This workspace has {vpce} registered VPC (PrivateLink) "
-                                 "endpoint(s). Migrating a PrivateLink workspace to CBI is NOT "
-                                 "supported yet - aborting.")
+        console.banner(
+            "danger",
+            f"This workspace has {vpce} registered VPC (PrivateLink) "
+            "endpoint(s). Migrating a PrivateLink workspace to CBI is NOT "
+            "supported yet - aborting.",
+        )
         raise typer.Exit(code=1)
     if vpce is None:
-        console.banner("warn", "Couldn't verify the workspace's registered VPC endpoints (account "
-                               "read failed). If this workspace uses PrivateLink, migration is NOT "
-                               "supported yet.")
+        console.banner(
+            "warn",
+            "Couldn't verify the workspace's registered VPC endpoints (account "
+            "read failed). If this workspace uses PrivateLink, migration is NOT "
+            "supported yet.",
+        )
 
     assigned_id, state = acl_core.assigned_ingress_state(account, workspace_id)
     if state is None:
@@ -311,29 +353,45 @@ def _acl_preflight(account, workspace_id, will_assign: bool, yes: bool) -> None:
 
     if not will_assign:
         kind = "an ENFORCED" if state == "enforced" else "a DRY-RUN"
-        console.banner("warn", f"This workspace already has {kind} CBI ingress policy "
-                               f"('{assigned_id}'). This run isn't assigning the new policy, so that "
-                               "one stays in place — the new policy will be created/exported but not "
-                               "bound to the workspace.")
+        console.banner(
+            "warn",
+            f"This workspace already has {kind} CBI ingress policy "
+            f"('{assigned_id}'). This run isn't assigning the new policy, so that "
+            "one stays in place — the new policy will be created/exported but not "
+            "bound to the workspace.",
+        )
         return
 
     if state == "enforced":
-        console.banner("danger", f"This workspace already has an ENFORCED CBI ingress policy "
-                                 f"('{assigned_id}'). Migrating on top of an existing enforced policy "
-                                 "is NOT supported yet - aborting.")
+        console.banner(
+            "danger",
+            f"This workspace already has an ENFORCED CBI ingress policy "
+            f"('{assigned_id}'). Migrating on top of an existing enforced policy "
+            "is NOT supported yet - aborting.",
+        )
         raise typer.Exit(code=1)
 
     # dry-run only, and we're about to assign a replacement
-    console.banner("warn", f"This workspace has a DRY-RUN CBI ingress policy ('{assigned_id}') with "
-                           "no enforced ingress. A migration needs an enforced baseline first.")
-    if not yes and sys.stdin.isatty() and typer.confirm(
-            typer.style(f"Promote '{assigned_id}' from dry-run to enforced now?", fg="yellow"),
-            default=False):
+    console.banner(
+        "warn",
+        f"This workspace has a DRY-RUN CBI ingress policy ('{assigned_id}') with "
+        "no enforced ingress. A migration needs an enforced baseline first.",
+    )
+    if (
+        not yes
+        and sys.stdin.isatty()
+        and typer.confirm(
+            typer.style(f"Promote '{assigned_id}' from dry-run to enforced now?", fg="yellow"), default=False
+        )
+    ):
         with console.status("Promoting policy to enforced…"):
             acl_core.promote_dry_run_to_enforced(
-                account, assigned_id, note=lambda m: console.banner("info", m))
-        console.banner("info", "Promoted to enforced. Re-run the migration to continue now that an "
-                               "enforced baseline exists.")
+                account, assigned_id, note=lambda m: console.banner("info", m)
+            )
+        console.banner(
+            "info",
+            "Promoted to enforced. Re-run the migration to continue now that an " "enforced baseline exists.",
+        )
     console.banner("info", "Migration cancelled.")
     raise typer.Exit(code=0)
 
@@ -389,8 +447,9 @@ def _export_policy(path: str, payload: dict) -> None:
     """Write the proposed policy as both JSON (curl / REST body) and best-effort Terraform."""
     json_dest = _write_json_export(path, payload)
     tf_dest = _write_tf_export(path, payload)
-    console.banner("success",
-                   f"Wrote proposed network-policy JSON to {json_dest} and Terraform to {tf_dest}.")
+    console.banner(
+        "success", f"Wrote proposed network-policy JSON to {json_dest} and Terraform to {tf_dest}."
+    )
 
 
 def _note_policy_name(policy_name: str) -> None:
@@ -399,20 +458,24 @@ def _note_policy_name(policy_name: str) -> None:
     if not policy_name:
         return
     from . import policy
+
     normalized = policy.policy_name("", explicit=policy_name)
     if normalized != policy_name:
-        console.banner("info", f"Using policy id '{normalized}' (names are normalised: lowercased, "
-                               f"non-alphanumerics become '-', capped at {MAX_POLICY_ID_LEN} chars).")
+        console.banner(
+            "info",
+            f"Using policy id '{normalized}' (names are normalised: lowercased, "
+            f"non-alphanumerics become '-', capped at {MAX_POLICY_ID_LEN} chars).",
+        )
 
 
 def _confirm_params(yes: bool) -> None:
     """After showing the config, ask the user to confirm before doing any work. --yes skips it, and
     it's a no-op non-interactively so scripted runs aren't blocked. Aborting exits cleanly (0)."""
     import sys
+
     if yes or not sys.stdin.isatty():
         return
-    if not typer.confirm("Proceed with these parameters? (No to abort and adjust flags)",
-                         default=True):
+    if not typer.confirm("Proceed with these parameters? (No to abort and adjust flags)", default=True):
         console.banner("info", "Aborted — adjust the flags and re-run (see --help).")
         raise typer.Exit(code=0)
 
@@ -422,9 +485,12 @@ def _confirm_write(yes: bool) -> bool:
     if yes:
         return True
     return typer.confirm(
-        typer.style("Review the proposed network policy rules above. Create/apply the network "
-                    "policy now?", fg="yellow"),
-        default=False)
+        typer.style(
+            "Review the proposed network policy rules above. Create/apply the network " "policy now?",
+            fg="yellow",
+        ),
+        default=False,
+    )
 
 
 def _checkpoint(yes: bool) -> None:
@@ -432,6 +498,7 @@ def _checkpoint(yes: bool) -> None:
     to continue. Aborts the run cleanly (exit 0) on 'n'. On by default; skipped with --yes and in
     non-interactive/scripted runs."""
     import sys
+
     if yes or not sys.stdin.isatty():
         return
     if not typer.confirm(typer.style("Continue to the next step?", fg="yellow"), default=True):
@@ -447,21 +514,26 @@ def _maybe_disable_ip_acls(disable: bool, results: list[dict], workspace_client)
     if not disable:
         return
     if not any(r.get("assigned") is not None for r in results):
-        console.banner("warn", "Skipped disabling IP access lists — no policy was assigned (the "
-                               "apply may have failed), so the workspace keeps its current "
-                               "protection.")
+        console.banner(
+            "warn",
+            "Skipped disabling IP access lists — no policy was assigned (the "
+            "apply may have failed), so the workspace keeps its current "
+            "protection.",
+        )
         return
     from . import acl as acl_core
+
     try:
         with console.status("Disabling workspace IP access lists…"):
-            acl_core.disable_ip_access_lists(
-                workspace_client, note=lambda m: console.banner("info", m))
+            acl_core.disable_ip_access_lists(workspace_client, note=lambda m: console.banner("info", m))
     except Exception as e:  # noqa: BLE001 - the policy is already applied; cleanup failure shouldn't crash
-        console.banner("warn",
-                       f"Couldn't disable the workspace IP access lists automatically: {e}. The new "
-                       "policy is created and assigned (the workspace stays protected — both "
-                       "controls just apply for now); disable the IP access lists manually in Admin "
-                       "settings if you want them off.")
+        console.banner(
+            "warn",
+            f"Couldn't disable the workspace IP access lists automatically: {e}. The new "
+            "policy is created and assigned (the workspace stays protected — both "
+            "controls just apply for now); disable the IP access lists manually in Admin "
+            "settings if you want them off.",
+        )
 
 
 def _acl_ip_gate(analysis, wc, yes: bool) -> None:
@@ -482,19 +554,27 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
 
     if toggle is False:
         if total == 0:
-            console.banner("info", "This workspace's IP access lists are disabled and have no rules. "
-                                   "There is nothing to migrate.")
+            console.banner(
+                "info",
+                "This workspace's IP access lists are disabled and have no rules. "
+                "There is nothing to migrate.",
+            )
             raise typer.Exit(code=0)
-        console.banner("warn", "This workspace's IP access lists are disabled, so there are no "
-                               "enabled rules to migrate.")
+        console.banner(
+            "warn",
+            "This workspace's IP access lists are disabled, so there are no " "enabled rules to migrate.",
+        )
         render.acl_current_config(analysis)
         if yes or not sys.stdin.isatty():
-            console.banner("info", "Re-run interactively to enable them, or set "
-                                   "enableIpAccessLists=true manually, then re-run — aborting.")
+            console.banner(
+                "info",
+                "Re-run interactively to enable them, or set "
+                "enableIpAccessLists=true manually, then re-run — aborting.",
+            )
             raise typer.Exit(code=0)
         if typer.confirm(
-                typer.style("Would you like to first enable your IP access lists?", fg="yellow"),
-                default=False):
+            typer.style("Would you like to first enable your IP access lists?", fg="yellow"), default=False
+        ):
             acl_core.enable_ip_access_lists(wc, note=lambda m: console.banner("info", m))
             console.banner("info", "Enabled — continuing with the migration of the now-active rules.")
             return  # proceed with the run
@@ -503,12 +583,14 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
 
     # toggle is True or None (unknown).
     if total == 0:
-        console.banner("info", "This workspace's IP access lists have no rules. There is nothing to "
-                               "migrate.")
+        console.banner(
+            "info", "This workspace's IP access lists have no rules. There is nothing to " "migrate."
+        )
         raise typer.Exit(code=0)
     if toggle is None:
-        console.banner("warn", "Couldn't read this workspace's IP access list enforcement state — "
-                               "proceeding.")
+        console.banner(
+            "warn", "Couldn't read this workspace's IP access list enforcement state — " "proceeding."
+        )
 
 
 def _ensure_acl_policy_name_unique(cfg: AclConfig, account, workspace_id, yes: bool) -> None:
@@ -521,12 +603,15 @@ def _ensure_acl_policy_name_unique(cfg: AclConfig, account, workspace_id, yes: b
     while acl_core.policy_exists(account, acl_core.resolve_policy_id(cfg, workspace_id)):
         pid = acl_core.resolve_policy_id(cfg, workspace_id)
         if yes or not sys.stdin.isatty():
-            console.banner("danger", f"A network policy named '{pid}' already exists. This tool only "
-                                     "creates new policies — choose a different --policy-name.")
+            console.banner(
+                "danger",
+                f"A network policy named '{pid}' already exists. This tool only "
+                "creates new policies — choose a different --policy-name.",
+            )
             raise typer.Exit(code=1)
-        console.banner("warn", f"A network policy named '{pid}' already exists — enter a different "
-                               "name.")
+        console.banner("warn", f"A network policy named '{pid}' already exists — enter a different " "name.")
         import questionary
+
         entered = (questionary.text("New policy name:").ask() or "").strip()
         if not entered:
             raise typer.Abort()
@@ -538,37 +623,53 @@ def migrate(
     profile: str | None = typer.Option(None, help="Databricks CLI/config profile."),
     policy_mode: Mode = typer.Option(Mode.enforce, help="enforce (default) or dry_run."),
     policy_name: str = typer.Option(
-        "", help="Policy id for the new policy. If omitted you'll be prompted (blank there = use the "
-                 "profile name). Normalised: lowercased, non-alphanumerics → '-', length-capped."),
+        "",
+        help="Policy id for the new policy. If omitted you'll be prompted (blank there = use the "
+        "profile name). Normalised: lowercased, non-alphanumerics → '-', length-capped.",
+    ),
     auto_assign: bool = typer.Option(True, help="Bind this workspace to the new policy."),
     disable_existing_ip_acls: bool = typer.Option(
-        False, help="After creating AND assigning the policy, disable this workspace's IP access "
-                    "lists (enableIpAccessLists=false). Requires --create-policy (assign is on by "
-                    "default)."),
+        False,
+        help="After creating AND assigning the policy, disable this workspace's IP access "
+        "lists (enableIpAccessLists=false). Requires --create-policy (assign is on by "
+        "default).",
+    ),
     export: str = typer.Option(
-        "", help="Write the proposed network-policy JSON (+ a sibling Terraform .tf) to this path "
-                 "(for curl / the REST API); a directory writes <policy-id>.json inside it (use "
-                 "--export . for the current directory). Works in propose-only mode too."),
+        "",
+        help="Write the proposed network-policy JSON (+ a sibling Terraform .tf) to this path "
+        "(for curl / the REST API); a directory writes <policy-id>.json inside it (use "
+        "--export . for the current directory). Works in propose-only mode too.",
+    ),
     account_id: str | None = typer.Option(None, help="Databricks account_id (apply/pre-checks)."),
     account_host: str = typer.Option("https://accounts.cloud.databricks.com", help="Account host."),
     account_profile: str | None = typer.Option(
-        None, help="Profile for account-level calls. Defaults to unified auth."),
+        None, help="Profile for account-level calls. Defaults to unified auth."
+    ),
     create_policy: bool = typer.Option(
-        True, help="Write the policy (default). For a propose-only run pass --no-create-policy "
-                   "--no-auto-assign. An interactive review gate still confirms before any write."),
+        True,
+        help="Write the policy (default). For a propose-only run pass --no-create-policy "
+        "--no-auto-assign. An interactive review gate still confirms before any write.",
+    ),
     yes: bool = typer.Option(
-        False, "--yes", "-y",
+        False,
+        "--yes",
+        "-y",
         help="Non-interactive mode: skip all prompts — the step-through pauses between sections and "
-             "the review/write gates. Use for scripted runs."),
+        "the review/write gates. Use for scripted runs.",
+    ),
 ):
     """Migrate this workspace's IP access list to a new CBI network policy."""
     from . import tls, usage
+
     tls.enable()
     usage.tag()  # tag SDK requests with the tool name (usage tracking) — before any client is built
     cfg = AclConfig(
-        policy_mode=policy_mode.value, policy_name=policy_name,
-        auto_assign=auto_assign, create_policy=create_policy,
-        disable_existing_ip_acls=disable_existing_ip_acls, export=export,
+        policy_mode=policy_mode.value,
+        policy_name=policy_name,
+        auto_assign=auto_assign,
+        create_policy=create_policy,
+        disable_existing_ip_acls=disable_existing_ip_acls,
+        export=export,
     )
     conn = _conn(profile, account_id, account_host, account_profile)
     _run_acl(cfg, conn, yes)
@@ -578,13 +679,13 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     from . import acl as acl_core
 
     try:
-        validate_acl_apply(cfg.create_policy, cfg.auto_assign, cfg.disable_existing_ip_acls,
-                           cfg.policy_mode)
+        validate_acl_apply(cfg.create_policy, cfg.auto_assign, cfg.disable_existing_ip_acls, cfg.policy_mode)
     except ValueError as e:
         raise typer.BadParameter(str(e)) from None
 
-    console.title_panel("IP Access List → CBI migration",
-                        "Migrate this workspace's IP ACL to a new CBI policy.")
+    console.title_panel(
+        "IP Access List → CBI migration", "Migrate this workspace's IP ACL to a new CBI policy."
+    )
     wc = _confirm_workspace(conn, yes)
 
     # Read the workspace's IP access lists + enforcement state up front, and decide whether there's
@@ -592,8 +693,11 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     analysis = acl_core.analyze(cfg, wc)
     _acl_ip_gate(analysis, wc, yes)
     if not (analysis.allow_specs or analysis.deny_specs):
-        console.banner("info", "This workspace's IP access lists are all individually disabled — "
-                               "there are no enabled rules to migrate.")
+        console.banner(
+            "info",
+            "This workspace's IP access lists are all individually disabled — "
+            "there are no enabled rules to migrate.",
+        )
         raise typer.Exit(code=0)
 
     # migrate-acl always needs account access: the pre-checks (PAS / VPC endpoints / existing policy)
@@ -615,7 +719,7 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
 
     preview = acl_core.preview_block(analysis, cfg, note=lambda m: console.banner("info", m))
     render.acl_preview(preview, cfg)
-    render.acl_disabled_notice(analysis)   # below [old]/[new], before create: vet disabled rules
+    render.acl_disabled_notice(analysis)  # below [old]/[new], before create: vet disabled rules
 
     if cfg.export:
         _export_policy(cfg.export, acl_core.policy_payload(analysis, cfg, conn.account_id))
@@ -632,8 +736,9 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
         return
 
     with console.status("Applying policy…"):
-        result = acl_core.apply(analysis, cfg, account, conn.account_id,
-                                note=lambda m: console.banner("info", m))
+        result = acl_core.apply(
+            analysis, cfg, account, conn.account_id, note=lambda m: console.banner("info", m)
+        )
     render.apply_results([result], conn.account_host, conn.account_id)
     _maybe_disable_ip_acls(cfg.disable_existing_ip_acls, [result], wc)
 

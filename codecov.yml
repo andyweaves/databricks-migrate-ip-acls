@@ -1,0 +1,14 @@
+# Coverage is reported publicly (badge + PR comments) but kept informational — it doesn't fail CI on
+# a small delta. Tighten `target`/remove `informational` to gate merges on coverage if desired.
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        informational: true
+
+comment:
+  layout: "reach, diff, files"
+  require_changes: true

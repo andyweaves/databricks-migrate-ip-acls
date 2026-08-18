@@ -23,11 +23,13 @@ class _FakeWs:
 
 
 def test_acl_analyze_splits_allow_deny_ipv4_only():
-    ws = _FakeWs([
-        _FakeAcl("office", "ALLOW", True, ["8.8.8.8/32", "2001:db8::/32"]),
-        _FakeAcl("bad", "BLOCK", True, ["9.9.9.0/24"]),
-        _FakeAcl("off", "ALLOW", False, ["1.1.1.1"]),
-    ])
+    ws = _FakeWs(
+        [
+            _FakeAcl("office", "ALLOW", True, ["8.8.8.8/32", "2001:db8::/32"]),
+            _FakeAcl("bad", "BLOCK", True, ["9.9.9.0/24"]),
+            _FakeAcl("off", "ALLOW", False, ["1.1.1.1"]),
+        ]
+    )
     a = acl_core.analyze(AclConfig(), ws)
     assert a.workspace_id == 42
     assert len(a.allow_specs) == 1 and a.allow_specs[0]["cidrs"] == ["8.8.8.8/32"]  # ipv6 dropped
@@ -58,8 +60,10 @@ def test_acl_analyze_all_disabled_leaves_nothing_to_migrate():
 class _CreateCapturingAccount:
     """An account client that captures the network_policy_id sent to create (workspace has no
     existing policy)."""
+
     def __init__(self, captured):
         from databricks.sdk.errors import NotFound
+
         self._NotFound = NotFound
         self.captured = captured
 
@@ -181,6 +185,7 @@ def _pas_account(pas_id):
     class _WS:
         def get(self, workspace_id):
             return type("W", (), {"private_access_settings_id": pas_id})()
+
     return type("Acct", (), {"workspaces": _WS()})()
 
 
@@ -193,6 +198,7 @@ def test_workspace_pas_attached_none_on_error():
     class _WS:
         def get(self, workspace_id):
             raise RuntimeError("no perms")
+
     acct = type("Acct", (), {"workspaces": _WS()})()
     assert acl_core.workspace_pas_attached(acct, 42) is None
 
@@ -207,6 +213,7 @@ def _vpce_account(network_id, dataplane=None, rest_api=None):
     class _NW:
         def get(self, network_id):
             return type("N", (), {"vpc_endpoints": ve})()
+
     return type("Acct", (), {"workspaces": _WS(), "networks": _NW()})()
 
 
@@ -224,6 +231,7 @@ def test_workspace_vpc_endpoint_count_none_on_error():
     class _WS:
         def get(self, workspace_id):
             raise RuntimeError("no perms")
+
     acct = type("Acct", (), {"workspaces": _WS()})()
     assert acl_core.workspace_vpc_endpoint_count(acct, 42) is None
 
@@ -238,6 +246,7 @@ def test_policy_exists_true_false():
     class _NPno:
         def get_network_policy_rpc(self, network_policy_id):
             raise NotFound("nope")
+
     assert acl_core.policy_exists(type("A", (), {"network_policies": _NPyes()})(), "p") is True
     assert acl_core.policy_exists(type("A", (), {"network_policies": _NPno()})(), "p") is False
 
@@ -250,16 +259,25 @@ def _policy_account(assigned_policy_id, policy_obj):
     class _NP:
         def get_network_policy_rpc(self, network_policy_id):
             return policy_obj
-    return type("Acct", (), {"workspace_network_configuration": _WNC(),
-                             "network_policies": _NP()})()
+
+    return type("Acct", (), {"workspace_network_configuration": _WNC(), "network_policies": _NP()})()
 
 
-def _ingress(public_mode="FULL_ACCESS", private_mode="ALLOW_ALL_REGISTERED_ENDPOINTS",
-             xws_mode="LEGACY_MODE"):
+def _ingress(
+    public_mode="FULL_ACCESS", private_mode="ALLOW_ALL_REGISTERED_ENDPOINTS", xws_mode="LEGACY_MODE"
+):
     def _blk(mode):
         return type("B", (), {"restriction_mode": mode, "allow_rules": None, "deny_rules": None})()
-    return type("Ing", (), {"public_access": _blk(public_mode), "private_access": _blk(private_mode),
-                            "cross_workspace_access": _blk(xws_mode)})()
+
+    return type(
+        "Ing",
+        (),
+        {
+            "public_access": _blk(public_mode),
+            "private_access": _blk(private_mode),
+            "cross_workspace_access": _blk(xws_mode),
+        },
+    )()
 
 
 def test_ingress_restrictive_matches_allow_all_vs_rules():
@@ -283,26 +301,28 @@ def test_public_vs_private_restrictive_helpers():
 
 def _egress(restricted=True, enforced=True, internet=None, storage=None):
     import types
+
     na = types.SimpleNamespace(
         restriction_mode="RESTRICTED_ACCESS" if restricted else "FULL_ACCESS",
-        allowed_internet_destinations=internet, allowed_storage_destinations=storage,
+        allowed_internet_destinations=internet,
+        allowed_storage_destinations=storage,
         blocked_internet_destinations=None,
-        policy_enforcement=types.SimpleNamespace(
-            enforcement_mode="ENFORCED" if enforced else "DRY_RUN"))
+        policy_enforcement=types.SimpleNamespace(enforcement_mode="ENFORCED" if enforced else "DRY_RUN"),
+    )
     return types.SimpleNamespace(network_access=na)
 
 
 def test_egress_restrictive_matches_restricted_mode_and_dest_lists():
     assert acl_core.egress_restrictive(None) is False
-    assert acl_core.egress_restrictive(_egress(restricted=False)) is False   # FULL_ACCESS
-    assert acl_core.egress_restrictive(_egress(restricted=True)) is True     # RESTRICTED_ACCESS
+    assert acl_core.egress_restrictive(_egress(restricted=False)) is False  # FULL_ACCESS
+    assert acl_core.egress_restrictive(_egress(restricted=True)) is True  # RESTRICTED_ACCESS
     # FULL_ACCESS but with an allow list present -> still restrictive
     assert acl_core.egress_restrictive(_egress(restricted=False, internet=["x"])) is True
 
 
 def test_egress_enforced_reads_enforcement_mode():
     assert acl_core.egress_enforced(_egress(enforced=True)) is True
-    assert acl_core.egress_enforced(_egress(enforced=False)) is False        # DRY_RUN
+    assert acl_core.egress_enforced(_egress(enforced=False)) is False  # DRY_RUN
     assert acl_core.egress_enforced(None) is False
 
 
@@ -320,15 +340,17 @@ def test_assigned_ingress_state_ignores_allow_all_policy():
     # temp / default-policy: dry-run block present but fully permissive -> no blocker (state None)
     allow_all = type("P", (), {"ingress": None, "ingress_dry_run": _ingress()})()
     assert acl_core.assigned_ingress_state(_policy_account("default-policy", allow_all), 42) == (
-        "default-policy", None)
+        "default-policy",
+        None,
+    )
 
 
 def test_assigned_ingress_state_enforced_dry_run_when_restrictive():
-    enforced = type("P", (), {"ingress": _ingress(public_mode="RESTRICTED_ACCESS"),
-                              "ingress_dry_run": None})()
+    enforced = type(
+        "P", (), {"ingress": _ingress(public_mode="RESTRICTED_ACCESS"), "ingress_dry_run": None}
+    )()
     assert acl_core.assigned_ingress_state(_policy_account("p1", enforced), 42) == ("p1", "enforced")
-    dry = type("P", (), {"ingress": None,
-                         "ingress_dry_run": _ingress(public_mode="RESTRICTED_ACCESS")})()
+    dry = type("P", (), {"ingress": None, "ingress_dry_run": _ingress(public_mode="RESTRICTED_ACCESS")})()
     assert acl_core.assigned_ingress_state(_policy_account("p2", dry), 42) == ("p2", "dry_run")
 
 
@@ -344,6 +366,7 @@ def test_promote_dry_run_to_enforced_moves_block():
         def update_network_policy_rpc(self, network_policy_id, network_policy):
             sent["id"] = network_policy_id
             sent["pol"] = network_policy
+
     acct = type("Acct", (), {"network_policies": _NP()})()
     acl_core.promote_dry_run_to_enforced(acct, "p1")
     assert sent["id"] == "p1"

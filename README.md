@@ -1,5 +1,8 @@
 # 🔁 Databricks Migrate IP ACLs
 
+[![CI](https://github.com/andyweaves/databricks-migrate-ip-acls/actions/workflows/ci.yml/badge.svg)](https://github.com/andyweaves/databricks-migrate-ip-acls/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/andyweaves/databricks-migrate-ip-acls/branch/main/graph/badge.svg)](https://codecov.io/gh/andyweaves/databricks-migrate-ip-acls)
+
 Recreate a Databricks workspace's **existing IP access list** as a **context-based ingress (CBI)
 account network policy**, verbatim — `ALLOW` lists → allow rules, `BLOCK` lists → deny rules —
 with account-level pre-checks and a dry-run-first, review-gated apply path. **No traffic analysis,
@@ -214,8 +217,24 @@ possible. See `usage.py`.
 ## 🧪 Development & tests
 
 ```bash
-uv run pytest -q
-uv run ruff check src/ tests/
+uv run pytest -q                      # tests (fully offline)
+uv run pytest --cov=dbx_migrate_ip_acls --cov-report=term-missing   # with coverage
+uv run ruff check src/ tests/         # lint
+uv run black --check src/ tests/      # style (run `uv run black src/ tests/` to format)
 ```
 
 Tests are fully offline (SDK clients and workspace/account reads are faked or monkeypatched).
+
+**CI** (`.github/workflows/ci.yml`) runs ruff + `black --check` + pytest-with-coverage on every push
+and PR across Python 3.10–3.12, and uploads coverage to Codecov (the badge above).
+
+## 📦 Releasing
+
+Releases are **fully automated** — there is no manual upload step:
+
+1. Bump `version` in `pyproject.toml`.
+2. Tag and push: `git tag vX.Y.Z && git push origin vX.Y.Z`.
+
+The `release.yml` workflow then builds the sdist + wheel and publishes to **PyPI via Trusted
+Publishing (OIDC)** — no stored token. One-time PyPI setup is required (Project → Publishing):
+owner `andyweaves`, repo `databricks-migrate-ip-acls`, workflow `release.yml`, environment `pypi`.
