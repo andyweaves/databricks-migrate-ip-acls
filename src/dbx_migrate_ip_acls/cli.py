@@ -745,8 +745,8 @@ def _reconcile_disabled_lists(analysis, cfg: AclConfig, wc, yes: bool):
         # Propose-only run: never re-enable (a write). Defer the offer to a create run.
         console.banner(
             "info",
-            "Propose-only run — nothing will be re-enabled. Re-run with --create-policy to be "
-            "offered to re-enable and include these rules before the policy is created.",
+            "Propose-only run — nothing will be re-enabled. Re-run with --create-policy for the "
+            "option to re-enable and include these rules before the policy is created.",
         )
         return analysis
     if yes or not sys.stdin.isatty():

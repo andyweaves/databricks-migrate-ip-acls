@@ -90,10 +90,9 @@ def acl_preview(preview: dict, cfg: AclConfig) -> None:
         console.json_panel("`egress` block", preview["egress"])
         console.banner(
             "warn",
-            "Serverless egress is left UNRESTRICTED (FULL_ACCESS) — this migration recreates only "
-            "the IP access list (ingress). Consider your egress requirements before auto-assigning "
-            "this policy to the workspace; assigning it can also replace an egress policy already in "
-            "effect.",
+            "Serverless egress is left UNRESTRICTED (FULL_ACCESS) — this migration recreates ingress "
+            "rules only. Please consider your egress requirements before auto-assigning this policy "
+            "to a workspace.",
         )
 
 
