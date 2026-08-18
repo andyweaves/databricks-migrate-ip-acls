@@ -45,14 +45,17 @@ MAX_TABLE_ROWS = 100
 
 def banner(kind: str, message: str) -> None:
     """Print a one-line severity banner. kind in {info, warn, danger, success}."""
+    # Glyphs are stored bare; the single separating space is added here, so there's always exactly
+    # one space between the emoji and the message (and no glyph ever ships without one).
     glyphs = {
-        "info": ("ℹ️ ", "info"),
-        "warn": ("⚠️ ", "warn"),
-        "danger": ("⛔ ", "danger"),
-        "success": ("✅ ", "ok"),
+        "info": ("ℹ️", "info"),
+        "warn": ("⚠️", "warn"),
+        "danger": ("⛔", "danger"),
+        "success": ("✅", "ok"),
     }
     glyph, style = glyphs.get(kind, ("", "value"))
-    console.print(Text(f"{glyph}{message}", style=style))
+    text = f"{glyph} {message}" if glyph else message
+    console.print(Text(text, style=style))
 
 
 def rule(title: str) -> None:
@@ -165,7 +168,7 @@ def responsibility_warning() -> None:
     """Shown after the policy JSON preview on every run — including propose-only, since the printed
     JSON can be copied and used to create a policy elsewhere."""
     body = Text()
-    body.append("⚠️  THIS IS A SECURITY-ENFORCING NETWORK POLICY\n\n", style="warn")
+    body.append("⚠️ THIS IS A SECURITY-ENFORCING NETWORK POLICY\n\n", style="warn")
     body.append(
         "You are solely responsible for reviewing every entry and confirming it is accurate and "
         "appropriate before using it in a policy — whether you create it here or copy this JSON to "

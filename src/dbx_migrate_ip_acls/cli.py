@@ -592,7 +592,8 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
         # disabled lists are flagged + offered for re-enable just after the gate, in _run_acl.)
         console.banner(
             "warn",
-            "This workspace's IP access lists are disabled, so there are no enabled rules to migrate.",
+            "This workspace's IP access lists are disabled, so there are no currently active rules "
+            "to migrate.",
         )
         if yes or not sys.stdin.isatty():
             console.banner(
