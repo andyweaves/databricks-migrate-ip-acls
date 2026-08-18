@@ -790,6 +790,9 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     _note_policy_name(cfg.policy_name)
     _confirm_params(yes)
 
+    # Show the final IP ACL set that will be migrated (reflecting any re-enables) and confirm, so the
+    # step-through pause has context rather than being a bare "continue?" after the params gate.
+    render.acl_current_config(analysis, workspace_enabled=True)
     _checkpoint(yes)
 
     preview = acl_core.preview_block(analysis, cfg, note=lambda m: console.banner("info", m))
