@@ -146,32 +146,13 @@ def status(message: str):
         yield
 
 
-def mode_banner(policy_mode: str) -> None:
-    """The prominent dry_run vs enforce banner shown before a preview/apply."""
-    if policy_mode == "enforce":
-        console.print(Panel(
-            Text("MODE = ENFORCE — non-matching traffic will be BLOCKED once applied. "
-                 "Validate in dry_run first.", style="enforce"),
-            border_style="danger", expand=False))
-    else:
-        console.print(Panel(
-            Text("MODE = DRY_RUN — log-only; nothing is blocked.", style="dry_run"),
-            border_style="ok", expand=False))
-
-
-def responsibility_warning(direction: str) -> None:
+def responsibility_warning() -> None:
     """Shown after the policy JSON preview on every run — including propose-only, since the printed
-    JSON can be copied and used to create a policy elsewhere. `direction` names what the rules are
-    built from, e.g. 'source IP addresses' (ingress) or 'FQDNs and storage destinations' (egress)."""
+    JSON can be copied and used to create a policy elsewhere."""
     body = Text()
     body.append("⚠️  THIS IS A SECURITY-ENFORCING NETWORK POLICY\n\n", style="warn")
     body.append(
-        f"A network policy controls access to/from your Databricks environment. The {direction} "
-        "above were derived from observed traffic and enrichment feeds as a best-effort starting "
-        "point — they are ", style="value")
-    body.append("not guaranteed to be complete or correct", style="danger")
-    body.append(
-        ".\n\nYou are solely responsible for reviewing every entry and confirming it is accurate and "
+        "You are solely responsible for reviewing every entry and confirming it is accurate and "
         "appropriate before using it in a policy — whether you create it here or copy this JSON to "
         "create it elsewhere. An incorrect or incomplete allow-list can block legitimate users or "
         "workloads (in enforce mode) or fail to block malicious ones.", style="value")

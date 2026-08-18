@@ -20,7 +20,8 @@ def acl_decisions(cfg: AclConfig) -> None:
         ("auto_assign", cfg.auto_assign, "Bind this workspace to the new policy."),
         ("disable_existing_ip_acls", cfg.disable_existing_ip_acls,
          "After apply, turn off the workspace's IP access lists (needs create + assign)."),
-        ("export", cfg.export, "Write the proposed policy JSON to this path (blank = don't)."),
+        ("export", cfg.export,
+         "Path to write the proposed policy as JSON + Terraform (.tf); '.' = current directory."),
         ("create_policy", cfg.create_policy, "Master switch: nothing is written unless true."),
     ])
 
@@ -63,7 +64,8 @@ def acl_disabled_notice(analysis) -> None:
 
 def acl_preview(preview: dict, cfg: AclConfig) -> None:
     console.rule("Proposed policy — JSON preview")
-    console.mode_banner(cfg.policy_mode)
+    console.banner("warn", "Please review the proposed context-based ingress policy carefully "
+                           "before applying.")
     console.json_panel(f"`{cfg.policy_mode_target}` block", preview)
 
 
