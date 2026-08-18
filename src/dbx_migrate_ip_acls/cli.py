@@ -131,6 +131,18 @@ def _is_expired_auth(msg: str) -> bool:
             or "databricks auth login" in m)
 
 
+def _reauth_profile(msg: str, fallback: str | None) -> str | None:
+    """The profile that actually needs re-authenticating. The SDK error spells out the fix as
+    `databricks auth login --profile <name>`, so prefer that exact profile — account access is often
+    a different, auto-discovered profile than the workspace one (matched by account host + id), and
+    re-authing the profile we *asked* for wouldn't fix it. Falls back to the passed profile when the
+    message doesn't name one."""
+    import re
+
+    m = re.search(r"auth login --profile (\S+)", msg)
+    return m.group(1).rstrip(".").strip("'\"") if m else fallback
+
+
 def _reauthenticate(profile: str) -> bool:
     """Offer to run `databricks auth login --profile <profile>` and return True if it succeeded (so
     the caller can retry building the client). Returns False — after printing the command to run —
@@ -177,7 +189,10 @@ def _client_or_exit(build, profile: str | None, flag: str):
     try:
         return build()
     except ValueError as e:
-        if profile and _is_expired_auth(str(e)) and _reauthenticate(profile):
+        # Re-auth the profile the SDK error actually names (which may differ from `profile` — e.g.
+        # the account client resolves to a separate auto-discovered profile), not the one we assumed.
+        reauth = _reauth_profile(str(e), profile) if _is_expired_auth(str(e)) else None
+        if reauth and _reauthenticate(reauth):
             try:
                 return build()
             except ValueError as e2:

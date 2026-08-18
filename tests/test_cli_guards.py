@@ -719,20 +719,34 @@ def test_expired_databricks_cli_not_on_path_exits(monkeypatch, capsys):
     assert "PATH" in capsys.readouterr().out
 
 
-def test_expired_account_client_uses_account_profile(monkeypatch):
-    # the same retry path applies to the account client, keyed on --account-profile.
+def test_reauth_profile_parsed_from_error_message():
+    # the SDK error names the exact profile to re-auth; prefer it over the assumed one.
+    assert cli._reauth_profile(_EXPIRED, "assumed") == "p"
+    acct = ("... To reauthenticate, run:\n  $ databricks auth login --profile sfe-account. "
+            "Config: host=https://accounts.cloud.databricks.com")
+    assert cli._reauth_profile(acct, "sfe-foghorn") == "sfe-account"  # not the assumed workspace one
+    # no profile named -> fall back to what we asked for
+    assert cli._reauth_profile("some unrelated error", "fallback") == "fallback"
+
+
+def test_expired_reauths_profile_named_in_error_not_assumed(monkeypatch):
+    # The real bug: account access resolves to a *different* auto-discovered profile (sfe-account)
+    # than --profile (sfe-foghorn). Re-auth must target the profile the SDK error names.
     import subprocess
 
     import dbx_migrate_ip_acls.auth as auth
     from dbx_migrate_ip_acls.config import Connection
 
+    acct_expired = ("default auth: databricks-cli: cannot get access token: the refresh token is "
+                    "invalid. To reauthenticate, run:\n  $ databricks auth login --profile "
+                    "sfe-account. Config: host=https://accounts.cloud.databricks.com")
     calls = {"n": 0}
     sentinel = object()
 
     def _build(conn):
         calls["n"] += 1
         if calls["n"] == 1:
-            raise ValueError(_EXPIRED)
+            raise ValueError(acct_expired)
         return sentinel
 
     monkeypatch.setattr(auth, "account_client", _build)
@@ -745,6 +759,7 @@ def test_expired_account_client_uses_account_profile(monkeypatch):
         ran["argv"] = argv
         return type("R", (), {"returncode": 0})()
     monkeypatch.setattr(subprocess, "run", _run)
-    acc = cli._account_client_or_exit(Connection(account_profile="acct"))
+    # workspace profile is sfe-foghorn, but the account error names sfe-account -> re-auth that one
+    acc = cli._account_client_or_exit(Connection(profile="sfe-foghorn"))
     assert acc is sentinel
-    assert ran["argv"] == ["databricks", "auth", "login", "--profile", "acct"]
+    assert ran["argv"] == ["databricks", "auth", "login", "--profile", "sfe-account"]
