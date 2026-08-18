@@ -963,7 +963,7 @@ def test_reconcile_noninteractive_flags_but_never_enables(monkeypatch, capsys):
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not enable non-interactively")),
     )
     a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
-    out = cli._reconcile_disabled_lists(a, AclConfig(), object(), yes=True)
+    out = cli._reconcile_disabled_lists(a, AclConfig(create_policy=True), object(), yes=True)
     assert out is a
     assert "WILL NOT be migrated" in capsys.readouterr().out
 
@@ -980,7 +980,7 @@ def test_reconcile_declined_does_not_enable(monkeypatch):
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("declined -> must not enable")),
     )
     a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
-    assert cli._reconcile_disabled_lists(a, AclConfig(), object(), yes=False) is a
+    assert cli._reconcile_disabled_lists(a, AclConfig(create_policy=True), object(), yes=False) is a
 
 
 def test_reconcile_accepted_enables_and_reanalyzes(monkeypatch):
@@ -994,5 +994,45 @@ def test_reconcile_accepted_enables_and_reanalyzes(monkeypatch):
     monkeypatch.setattr("dbx_migrate_ip_acls.acl.enable_disabled_lists", lambda wc, labels: (1, []))
     monkeypatch.setattr("dbx_migrate_ip_acls.acl.analyze", lambda cfg, wc: fresh)
     a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
-    out = cli._reconcile_disabled_lists(a, AclConfig(), object(), yes=False)
+    out = cli._reconcile_disabled_lists(a, AclConfig(create_policy=True), object(), yes=False)
     assert out is fresh  # re-read analysis folds in the now-enabled list
+
+
+# --- propose-only runs must not offer/perform re-enables (no writes) ---------------------------
+
+
+def test_acl_ip_gate_disabled_propose_only_skips_reenable(monkeypatch, capsys):
+    # toggle OFF + rules + --no-create-policy: must NOT prompt or enable enforcement; proceeds.
+    monkeypatch.setattr("dbx_migrate_ip_acls.acl.ip_acl_enforcement_state", lambda wc: False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        "typer.confirm",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("propose-only must not prompt")),
+    )
+    monkeypatch.setattr(
+        "dbx_migrate_ip_acls.acl.enable_ip_access_lists",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("propose-only must not enable")),
+    )
+    cli._acl_ip_gate(_acl_analysis(enabled=1), object(), yes=False, create_policy=False)  # no raise
+    assert "propose-only" in capsys.readouterr().out.lower()
+
+
+def test_reconcile_propose_only_flags_but_does_not_offer(monkeypatch, capsys):
+    import types
+
+    from dbx_migrate_ip_acls.config import AclConfig
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(
+        "typer.confirm",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("propose-only must not prompt")),
+    )
+    monkeypatch.setattr(
+        "dbx_migrate_ip_acls.acl.enable_disabled_lists",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("propose-only must not enable")),
+    )
+    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
+    out = cli._reconcile_disabled_lists(a, AclConfig(create_policy=False), object(), yes=False)
+    assert out is a
+    o = capsys.readouterr().out.lower()
+    assert "will not be migrated" in o and "propose-only" in o

@@ -567,12 +567,13 @@ def _maybe_disable_ip_acls(disable: bool, results: list[dict], workspace_client)
         )
 
 
-def _acl_ip_gate(analysis, wc, yes: bool) -> None:
+def _acl_ip_gate(analysis, wc, yes: bool, create_policy: bool = True) -> None:
     """Right after the workspace is chosen, decide whether there's anything to migrate, based on the
     workspace-wide `enableIpAccessLists` toggle × the number of IP access lists:
       * disabled + 0 rules  → nothing to migrate (exit);
-      * disabled + 1+ rules → print the current config, offer to re-enable (interactively); either
-        way exit so the migration re-runs against active rules;
+      * disabled + 1+ rules → print the current config; when creating a policy, offer to re-enable
+        enforcement (interactively). A propose-only run (no --create-policy) never writes, so it
+        skips the offer and just previews from the individually-enabled lists;
       * enabled  + 0 rules  → nothing to migrate (exit);
       * enabled  + 1+ rules → show the current config, then proceed.
     A read failure on the toggle (None) just warns and proceeds. All exits are clean (code 0)."""
@@ -592,6 +593,17 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
             )
             raise typer.Exit(code=0)
         render.acl_current_config(analysis, workspace_enabled=False)
+        if not create_policy:
+            # Propose-only run: never write, so don't offer to re-enable enforcement. Preview from
+            # the individually-enabled lists; re-enabling is offered only when creating a policy.
+            console.banner(
+                "info",
+                "This workspace's IP access lists are disabled (not enforced). This is a "
+                "propose-only run, so nothing will be changed — the preview below is built from the "
+                "individually-enabled lists. Re-run with --create-policy to be offered to re-enable "
+                "your IP access lists.",
+            )
+            return  # proceed to preview (the empty-check handles 'no enabled lists')
         # The workspace-off warning sits last, directly above the enable prompt. (Individually-
         # disabled lists are flagged + offered for re-enable just after the gate, in _run_acl.)
         console.banner(
@@ -719,8 +731,9 @@ def migrate(
 def _reconcile_disabled_lists(analysis, cfg: AclConfig, wc, yes: bool):
     """Flag individually-disabled IP access lists (they won't be migrated) and — interactively —
     offer to re-enable and include them in this migration. On acceptance, enable them and re-read
-    the workspace so they're folded into the analysis. Non-interactive / --yes never re-enables a
-    deliberately-disabled list. Returns the (possibly re-read) analysis."""
+    the workspace so they're folded into the analysis. A propose-only run (no --create-policy) never
+    writes, so it just flags them; non-interactive / --yes never re-enables a deliberately-disabled
+    list. Returns the (possibly re-read) analysis."""
     import sys
 
     from . import acl as acl_core
@@ -728,6 +741,14 @@ def _reconcile_disabled_lists(analysis, cfg: AclConfig, wc, yes: bool):
     if not analysis.disabled_acls:
         return analysis
     render.acl_disabled_notice(analysis)
+    if not cfg.create_policy:
+        # Propose-only run: never re-enable (a write). Defer the offer to a create run.
+        console.banner(
+            "info",
+            "Propose-only run — nothing will be re-enabled. Re-run with --create-policy to be "
+            "offered to re-enable and include these rules before the policy is created.",
+        )
+        return analysis
     if yes or not sys.stdin.isatty():
         return analysis
     labels = [a["label"] for a in analysis.disabled_acls]
@@ -765,7 +786,7 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     # Read the workspace's IP access lists + enforcement state up front, and decide whether there's
     # anything to migrate at all (the quadrant gate may exit cleanly).
     analysis = acl_core.analyze(cfg, wc)
-    _acl_ip_gate(analysis, wc, yes)
+    _acl_ip_gate(analysis, wc, yes, cfg.create_policy)
     # Flag any individually-disabled lists and offer to re-enable + include them (may re-read).
     analysis = _reconcile_disabled_lists(analysis, cfg, wc, yes)
     if not (analysis.allow_specs or analysis.deny_specs):
