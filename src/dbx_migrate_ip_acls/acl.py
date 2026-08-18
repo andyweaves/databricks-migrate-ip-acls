@@ -325,8 +325,14 @@ def policy_payload(analysis: AclAnalysis, cfg: AclConfig, account_id: str) -> di
 
 
 def preview_block(analysis: AclAnalysis, cfg: AclConfig, note: Note = lambda _m: None) -> dict:
+    # Mirror the policy body that would be created: the ingress mode block + the permissive
+    # FULL_ACCESS egress the migration carries (serverless egress is left unrestricted), so the
+    # preview surfaces the egress default too.
     block = build_block(analysis, cfg, note)
-    return {cfg.policy_mode_target: block.as_dict()}
+    return {
+        cfg.policy_mode_target: block.as_dict(),
+        "egress": policy.build_full_access_egress().as_dict(),
+    }
 
 
 def apply(

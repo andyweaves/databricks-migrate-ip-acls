@@ -48,12 +48,21 @@ def acl_current_config(analysis, workspace_enabled: bool = False) -> None:
     (ENABLED)/(DISABLED) suffix reflects the workspace-wide enforcement state."""
     state = "ENABLED" if workspace_enabled else "DISABLED"
     console.rule(f"Current IP access list configuration ({state})")
-    # Colour the `enabled` cell so disabled lists (which won't be migrated) clearly stand out: red
-    # False vs green True. (Rich markup renders in the terminal; it's stripped in non-TTY/captured
-    # output, leaving plain "True"/"False".)
-    rows = [{**a, "enabled": "[ok]True[/ok]"} for a in analysis.ip_acls] + [
-        {**a, "enabled": "[danger]False[/danger]"} for a in analysis.disabled_acls
-    ]
+    # A list is migrated only if it's enabled AND produced a rule (has usable IPv4 CIDRs) — i.e. its
+    # label appears in the built allow/deny specs. Disabled lists are never migrated.
+    migrated = {s["label"] for s in getattr(analysis, "allow_specs", [])} | {
+        s["label"] for s in getattr(analysis, "deny_specs", [])
+    }
+
+    def _flag(ok: bool) -> str:
+        # Colour the cell so the answer clearly stands out (red False / green True). Rich markup
+        # renders in the terminal and is stripped in non-TTY/captured output (plain "True"/"False").
+        return "[ok]True[/ok]" if ok else "[danger]False[/danger]"
+
+    rows = [
+        {**a, "enabled": _flag(True), "will_be_migrated": _flag(a["label"][:250] in migrated)}
+        for a in analysis.ip_acls
+    ] + [{**a, "enabled": _flag(False), "will_be_migrated": _flag(False)} for a in analysis.disabled_acls]
     if rows:
         _acl_table(rows, f"IP access lists on workspace {analysis.workspace_id}")
 
@@ -74,9 +83,18 @@ def acl_disabled_notice(analysis) -> None:
 def acl_preview(preview: dict, cfg: AclConfig) -> None:
     console.rule("Proposed policy — JSON preview")
     console.banner(
-        "warn", "Please review the proposed context-based ingress policy carefully " "before applying."
+        "warn", "Please review the proposed context-based ingress policy carefully before applying."
     )
-    console.json_panel(f"`{cfg.policy_mode_target}` block", preview)
+    console.json_panel(f"`{cfg.policy_mode_target}` block", preview.get(cfg.policy_mode_target))
+    if "egress" in preview:
+        console.json_panel("`egress` block", preview["egress"])
+        console.banner(
+            "warn",
+            "Serverless egress is left UNRESTRICTED (FULL_ACCESS) — this migration recreates only "
+            "the IP access list (ingress). Consider your egress requirements before auto-assigning "
+            "this policy to the workspace; assigning it can also replace an egress policy already in "
+            "effect.",
+        )
 
 
 # ------------------------------------------------------------------------------- apply results
