@@ -547,8 +547,9 @@ def migrate(
              "the review/write gates. Use for scripted runs."),
 ):
     """Migrate this workspace's IP access list to a new CBI network policy."""
-    from . import tls
+    from . import tls, usage
     tls.enable()
+    usage.tag()  # tag SDK requests with the tool name (usage tracking) — before any client is built
     cfg = AclConfig(
         policy_mode=policy_mode.value, policy_name=policy_name,
         auto_assign=auto_assign, create_policy=create_policy,
