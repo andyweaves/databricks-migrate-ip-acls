@@ -939,3 +939,60 @@ def test_write_export_noninteractive_overwrites_silently(monkeypatch, tmp_path):
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not prompt non-interactively")),
     )
     assert cli._write_json_export(str(dest), {"network_policy_id": "p"}, yes=False) == str(dest)
+
+
+# --- _reconcile_disabled_lists (offer to re-enable + include disabled lists) --------------------
+
+
+def test_reconcile_no_disabled_returns_unchanged():
+    import types
+
+    from dbx_migrate_ip_acls.config import AclConfig
+
+    a = types.SimpleNamespace(disabled_acls=[])
+    assert cli._reconcile_disabled_lists(a, AclConfig(), object(), yes=True) is a
+
+
+def test_reconcile_noninteractive_flags_but_never_enables(monkeypatch, capsys):
+    import types
+
+    from dbx_migrate_ip_acls.config import AclConfig
+
+    monkeypatch.setattr(
+        "dbx_migrate_ip_acls.acl.enable_disabled_lists",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not enable non-interactively")),
+    )
+    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
+    out = cli._reconcile_disabled_lists(a, AclConfig(), object(), yes=True)
+    assert out is a
+    assert "WILL NOT be migrated" in capsys.readouterr().out
+
+
+def test_reconcile_declined_does_not_enable(monkeypatch):
+    import types
+
+    from dbx_migrate_ip_acls.config import AclConfig
+
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: False)
+    monkeypatch.setattr(
+        "dbx_migrate_ip_acls.acl.enable_disabled_lists",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("declined -> must not enable")),
+    )
+    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
+    assert cli._reconcile_disabled_lists(a, AclConfig(), object(), yes=False) is a
+
+
+def test_reconcile_accepted_enables_and_reanalyzes(monkeypatch):
+    import types
+
+    from dbx_migrate_ip_acls.config import AclConfig
+
+    fresh = types.SimpleNamespace(disabled_acls=[], allow_specs=[{"cidrs": ["8.8.8.8/32"]}])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: True)
+    monkeypatch.setattr("dbx_migrate_ip_acls.acl.enable_disabled_lists", lambda wc, labels: (1, []))
+    monkeypatch.setattr("dbx_migrate_ip_acls.acl.analyze", lambda cfg, wc: fresh)
+    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
+    out = cli._reconcile_disabled_lists(a, AclConfig(), object(), yes=False)
+    assert out is fresh  # re-read analysis folds in the now-enabled list

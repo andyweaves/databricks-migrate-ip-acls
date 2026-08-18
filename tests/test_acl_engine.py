@@ -384,3 +384,46 @@ def test_acl_policy_payload_is_curl_ready():
     assert payload["account_id"] == "acc-123"
     assert "ingress" in payload  # enforce -> ingress (not ingress_dry_run)
     assert payload["egress"]["network_access"]["restriction_mode"] == "FULL_ACCESS"
+
+
+# --- enable_disabled_lists (re-enable individually-disabled lists) -----------------------------
+
+
+class _EnableAcl:
+    def __init__(self, list_id, label, enabled):
+        self.list_id, self.label, self.enabled = list_id, label, enabled
+        self.ip_addresses = ["8.8.8.8/32"]
+        self.list_type = type("LT", (), {"value": "ALLOW"})()
+
+
+def _enable_ws(acls, updater):
+    api = type("Api", (), {"list": lambda self: acls, "update": updater})()
+    return type("WS", (), {"ip_access_lists": api})()
+
+
+def test_enable_disabled_lists_enables_only_matching_disabled():
+    acls = [
+        _EnableAcl("1", "office", True),
+        _EnableAcl("2", "vpn", False),
+        _EnableAcl("3", "Veuve_IPs", False),
+    ]
+    seen = []
+
+    def _update(self, ip_access_list_id, label, list_type, ip_addresses, enabled):
+        seen.append((label, enabled))
+
+    n, failures = acl_core.enable_disabled_lists(_enable_ws(acls, _update), ["vpn", "Veuve_IPs", "not-there"])
+    assert n == 2 and failures == []
+    # office is already enabled and "not-there" doesn't exist -> only the two disabled ones updated
+    assert sorted(label for label, _ in seen) == ["Veuve_IPs", "vpn"]
+    assert all(enabled is True for _, enabled in seen)
+
+
+def test_enable_disabled_lists_captures_per_list_failures():
+    acls = [_EnableAcl("2", "vpn", False)]
+
+    def _update(self, **kwargs):
+        raise RuntimeError("current IP will not be allowed")  # e.g. self-lockout guard on a BLOCK list
+
+    n, failures = acl_core.enable_disabled_lists(_enable_ws(acls, _update), ["vpn"])
+    assert n == 0 and len(failures) == 1 and failures[0].startswith("vpn:")

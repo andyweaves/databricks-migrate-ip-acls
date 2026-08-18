@@ -588,9 +588,8 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
             )
             raise typer.Exit(code=0)
         render.acl_current_config(analysis, workspace_enabled=False)
-        # Flag any individually-disabled lists that won't be migrated even after re-enabling.
-        render.acl_disabled_notice(analysis)
-        # The workspace-off warning sits last, directly above the enable prompt.
+        # The workspace-off warning sits last, directly above the enable prompt. (Individually-
+        # disabled lists are flagged + offered for re-enable just after the gate, in _run_acl.)
         console.banner(
             "warn",
             "This workspace's IP access lists are disabled, so there are no enabled rules to migrate.",
@@ -603,7 +602,11 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
             )
             raise typer.Exit(code=0)
         if typer.confirm(
-            typer.style("Would you like to first enable your IP access lists?", fg="yellow"), default=False
+            typer.style(
+                "Would you like to re-enable your IP access lists to continue with the migration?",
+                fg="yellow",
+            ),
+            default=False,
         ):
             acl_core.enable_ip_access_lists(wc, note=lambda m: console.banner("info", m))
             console.banner("info", "Enabled — continuing with the migration of the now-active rules.")
@@ -705,6 +708,39 @@ def migrate(
     _run_acl(cfg, conn, yes)
 
 
+def _reconcile_disabled_lists(analysis, cfg: AclConfig, wc, yes: bool):
+    """Flag individually-disabled IP access lists (they won't be migrated) and — interactively —
+    offer to re-enable and include them in this migration. On acceptance, enable them and re-read
+    the workspace so they're folded into the analysis. Non-interactive / --yes never re-enables a
+    deliberately-disabled list. Returns the (possibly re-read) analysis."""
+    import sys
+
+    from . import acl as acl_core
+
+    if not analysis.disabled_acls:
+        return analysis
+    render.acl_disabled_notice(analysis)
+    if yes or not sys.stdin.isatty():
+        return analysis
+    labels = [a["label"] for a in analysis.disabled_acls]
+    if not typer.confirm(
+        typer.style(
+            f"Re-enable + include these {len(labels)} disabled list(s) in this migration?",
+            fg="yellow",
+        ),
+        default=False,
+    ):
+        return analysis
+    with console.status("Re-enabling IP access lists…"):
+        enabled, failures = acl_core.enable_disabled_lists(wc, labels)
+    for f in failures:
+        console.banner("warn", f"Couldn't re-enable {f}")
+    if enabled:
+        console.banner("success", f"Re-enabled {enabled} IP access list(s) — including them now.")
+        return acl_core.analyze(cfg, wc)
+    return analysis
+
+
 def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     from . import acl as acl_core
 
@@ -722,6 +758,8 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     # anything to migrate at all (the quadrant gate may exit cleanly).
     analysis = acl_core.analyze(cfg, wc)
     _acl_ip_gate(analysis, wc, yes)
+    # Flag any individually-disabled lists and offer to re-enable + include them (may re-read).
+    analysis = _reconcile_disabled_lists(analysis, cfg, wc, yes)
     if not (analysis.allow_specs or analysis.deny_specs):
         console.banner(
             "info",
@@ -749,7 +787,6 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
 
     preview = acl_core.preview_block(analysis, cfg, note=lambda m: console.banner("info", m))
     render.acl_preview(preview, cfg)
-    render.acl_disabled_notice(analysis)  # below [old]/[new], before create: vet disabled rules
 
     if cfg.export:
         _export_policy(cfg.export, acl_core.policy_payload(analysis, cfg, conn.account_id), yes)
