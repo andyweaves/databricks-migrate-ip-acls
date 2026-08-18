@@ -20,7 +20,7 @@ def _acl_analysis_obj(disabled=True):
 def test_acl_disabled_notice_flags_disabled_rules(capsys):
     render.acl_disabled_notice(_acl_analysis_obj(disabled=True))
     out = capsys.readouterr().out
-    assert "old-vpn" in out and "will not be migrated" in out.lower() and "vet" in out.lower()
+    assert "old-vpn" in out and "will not be migrated" in out.lower() and "review" in out.lower()
 
 
 def test_acl_disabled_notice_silent_when_none(capsys):
