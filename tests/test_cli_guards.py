@@ -968,34 +968,45 @@ def test_reconcile_noninteractive_flags_but_never_enables(monkeypatch, capsys):
     assert "WILL NOT be migrated" in capsys.readouterr().out
 
 
-def test_reconcile_declined_does_not_enable(monkeypatch):
+def _fake_checkbox(selection):
+    """A stand-in for questionary.checkbox(...) whose .ask() returns `selection`."""
+    return type("CB", (), {"ask": lambda self: selection})()
+
+
+def test_reconcile_select_none_does_not_enable(monkeypatch):
     import types
 
     from dbx_migrate_ip_acls.config import AclConfig
 
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("typer.confirm", lambda *a, **k: False)
+    monkeypatch.setattr("questionary.checkbox", lambda *a, **k: _fake_checkbox([]))  # select none
     monkeypatch.setattr(
         "dbx_migrate_ip_acls.acl.enable_disabled_lists",
-        lambda *a, **k: (_ for _ in ()).throw(AssertionError("declined -> must not enable")),
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("none selected -> must not enable")),
     )
     a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
     assert cli._reconcile_disabled_lists(a, AclConfig(create_policy=True), object(), yes=False) is a
 
 
-def test_reconcile_accepted_enables_and_reanalyzes(monkeypatch):
+def test_reconcile_enables_only_the_selected_subset_and_reanalyzes(monkeypatch):
     import types
 
     from dbx_migrate_ip_acls.config import AclConfig
 
     fresh = types.SimpleNamespace(disabled_acls=[], allow_specs=[{"cidrs": ["8.8.8.8/32"]}])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    monkeypatch.setattr("typer.confirm", lambda *a, **k: True)
-    monkeypatch.setattr("dbx_migrate_ip_acls.acl.enable_disabled_lists", lambda wc, labels: (1, []))
+    # user ticks only "Veuve_IPs" out of the two disabled lists
+    monkeypatch.setattr("questionary.checkbox", lambda *a, **k: _fake_checkbox(["Veuve_IPs"]))
+    seen = {}
+    monkeypatch.setattr(
+        "dbx_migrate_ip_acls.acl.enable_disabled_lists",
+        lambda wc, labels: (seen.update(labels=labels) or (len(labels), [])),
+    )
     monkeypatch.setattr("dbx_migrate_ip_acls.acl.analyze", lambda cfg, wc: fresh)
-    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
+    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}, {"label": "office"}])
     out = cli._reconcile_disabled_lists(a, AclConfig(create_policy=True), object(), yes=False)
-    assert out is fresh  # re-read analysis folds in the now-enabled list
+    assert out is fresh  # re-read analysis folds in the selected list
+    assert seen["labels"] == ["Veuve_IPs"]  # only the ticked subset is enabled, not all
 
 
 # --- propose-only runs must not offer/perform re-enables (no writes) ---------------------------

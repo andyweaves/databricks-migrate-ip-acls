@@ -751,17 +751,17 @@ def _reconcile_disabled_lists(analysis, cfg: AclConfig, wc, yes: bool):
         return analysis
     if yes or not sys.stdin.isatty():
         return analysis
-    labels = [a["label"] for a in analysis.disabled_acls]
-    if not typer.confirm(
-        typer.style(
-            "Do you want to re-enable and include these rules in the migration?",
-            fg="yellow",
-        ),
-        default=False,
-    ):
+    import questionary
+
+    # Let the user pick exactly which disabled rules to re-enable + include (not all-or-nothing).
+    chosen = questionary.checkbox(
+        "Select disabled rules to re-enable and include (space to toggle, enter to confirm):",
+        choices=[a["label"] for a in analysis.disabled_acls],
+    ).ask()
+    if not chosen:  # none selected (or aborted) — migrate the currently-enabled lists as-is
         return analysis
     with console.status("Re-enabling IP access lists…"):
-        enabled, failures = acl_core.enable_disabled_lists(wc, labels)
+        enabled, failures = acl_core.enable_disabled_lists(wc, chosen)
     for f in failures:
         console.banner("warn", f"Couldn't re-enable {f}")
     if enabled:
