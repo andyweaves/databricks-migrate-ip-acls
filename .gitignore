@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+.DS_Store
+.ipynb_checkpoints/
+*.egg-info/
+.venv/
+venv/
+.ruff_cache/
+.pytest_cache/
+dist/
+build/
+
+# uv lockfile — omitted from the public repo (would embed the internal PyPI proxy URL);
+# dependencies are pinned in pyproject.toml.
+uv.lock
+.coverage
+htmlcov/
