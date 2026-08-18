@@ -32,6 +32,12 @@ def test_acl_current_config_shows_enabled_and_disabled(capsys):
     render.acl_current_config(_acl_analysis_obj(disabled=True))
     out = capsys.readouterr().out
     assert "office" in out and "old-vpn" in out  # both enabled + disabled lists shown
+    assert "(DISABLED)" in out  # header reflects workspace enforcement state (default off)
+
+
+def test_acl_current_config_header_reflects_enabled_state(capsys):
+    render.acl_current_config(_acl_analysis_obj(disabled=False), workspace_enabled=True)
+    assert "(ENABLED)" in capsys.readouterr().out
 
 
 def test_acl_decisions_renders(capsys):

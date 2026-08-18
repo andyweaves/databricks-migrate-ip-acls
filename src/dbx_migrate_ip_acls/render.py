@@ -42,10 +42,12 @@ def _acl_table(rows: list[dict], title: str) -> None:
     )
 
 
-def acl_current_config(analysis) -> None:
+def acl_current_config(analysis, workspace_enabled: bool = False) -> None:
     """The workspace's *current* IP access list configuration — all lists, enabled and disabled —
-    shown when the workspace toggle is off so the user sees what they'd be enabling."""
-    console.rule("Current IP access list configuration")
+    shown when the workspace toggle is off so the user sees what they'd be enabling. The
+    (ENABLED)/(DISABLED) suffix reflects the workspace-wide enforcement state."""
+    state = "ENABLED" if workspace_enabled else "DISABLED"
+    console.rule(f"Current IP access list configuration ({state})")
     rows = [{**a, "enabled": True} for a in analysis.ip_acls] + [
         {**a, "enabled": False} for a in analysis.disabled_acls
     ]
@@ -54,7 +56,9 @@ def acl_current_config(analysis) -> None:
 
 
 def acl_analysis(analysis, cfg: AclConfig) -> None:
-    console.rule("Existing IP access list")
+    # The workspace toggle is on by the time we render this (the gate enabled it, or it already was),
+    # so label the enforcement state ENABLED to mirror acl_current_config's (DISABLED) gate view.
+    console.rule("Current IP access list configuration (ENABLED)")
     if not analysis.ip_acls:
         console.banner("warn", "No enabled IP access lists on this workspace — nothing to migrate.")
         return

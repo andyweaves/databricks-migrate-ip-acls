@@ -587,11 +587,14 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
                 "There is nothing to migrate.",
             )
             raise typer.Exit(code=0)
+        render.acl_current_config(analysis, workspace_enabled=False)
+        # Flag any individually-disabled lists that won't be migrated even after re-enabling.
+        render.acl_disabled_notice(analysis)
+        # The workspace-off warning sits last, directly above the enable prompt.
         console.banner(
             "warn",
-            "This workspace's IP access lists are disabled, so there are no " "enabled rules to migrate.",
+            "This workspace's IP access lists are disabled, so there are no enabled rules to migrate.",
         )
-        render.acl_current_config(analysis)
         if yes or not sys.stdin.isatty():
             console.banner(
                 "info",
