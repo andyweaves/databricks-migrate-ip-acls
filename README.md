@@ -5,7 +5,7 @@
 
 Recreate a Databricks workspace's **existing IP access list** as a **context-based ingress (CBI)
 account network policy**
-> Looking for traffic-analysis-based ingress/egress policies (context-based ingress from audit-log
+> 💡 Looking for traffic-analysis-based ingress/egress policies (context-based ingress from audit-log
 > source IPs, serverless egress from observed outbound traffic, threat-intel / cloud enrichment,
 > identity/destination scoping)? Those live in the sibling tool
 > **[databricks-network-policy-helper](https://github.com/andyweaves/databricks-network-policy-helper)**
