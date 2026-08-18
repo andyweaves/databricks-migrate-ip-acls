@@ -81,7 +81,9 @@ def _resolve_profile(profile: str | None) -> str | None:
     import questionary
 
     choice = questionary.select(
-        "Which Databricks profile? (pass --profile to skip this prompt)", choices=profiles
+        "Which Databricks profile would you like to use? (pass --profile to skip this prompt)",
+        choices=profiles,
+        instruction="(Use the arrow keys to select)",
     ).ask()
     if not choice:
         raise typer.Abort()
@@ -716,6 +718,7 @@ def migrate(
 
     tls.enable()
     usage.tag()  # tag SDK requests with the tool name (usage tracking) — before any client is built
+    console.app_banner()  # splash before the profile prompt, so it's clear what's running
     cfg = AclConfig(
         policy_mode=policy_mode.value,
         policy_name=policy_name,

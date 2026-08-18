@@ -42,6 +42,25 @@ console = Console(theme=THEME, highlight=False)
 # Default cap on rows rendered to the terminal; full data can be written out with --output.
 MAX_TABLE_ROWS = 100
 
+# ASCII splash (figlet "small") shown at startup so it's immediately clear which tool is running.
+_APP_BANNER = r"""
+ ___       _        _        _    _
+|   \ __ _| |_ __ _| |__ _ _(_)__| |__ ___
+| |) / _` |  _/ _` | '_ \ '_| / _| / /(_-<
+|___/\__,_|\__\__,_|_.__/_| |_\__|_\_\/__/
+ __  __ _               _         ___ ___     _   ___ _
+|  \/  (_)__ _ _ _ __ _| |_ ___  |_ _| _ \   /_\ / __| |   ___
+| |\/| | / _` | '_/ _` |  _/ -_)  | ||  _/  / _ \ (__| |__(_-<
+|_|  |_|_\__, |_| \__,_|\__\___| |___|_|   /_/ \_\___|____/__/
+         |___/
+"""
+
+
+def app_banner() -> None:
+    """Print the tool's ASCII-art splash at startup, before anything else, so users can see at a
+    glance what they're running."""
+    console.print(Text(_APP_BANNER.strip("\n"), style="brand"))
+
 
 def banner(kind: str, message: str) -> None:
     """Print a one-line severity banner. kind in {info, warn, danger, success}."""
