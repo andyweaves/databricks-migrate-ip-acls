@@ -616,11 +616,13 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     preview = acl_core.preview_block(analysis, cfg, note=lambda m: console.banner("info", m))
     render.acl_preview(preview, cfg)
     render.acl_disabled_notice(analysis)   # below [old]/[new], before create: vet disabled rules
-    console.responsibility_warning()
 
     if cfg.export:
         _export_policy(cfg.export, acl_core.policy_payload(analysis, cfg, conn.account_id))
-    _checkpoint(yes)
+
+    # The responsibility warning sits directly before the write gate (or the propose-only exit), just
+    # after the export log — the last thing shown before you decide to create/apply.
+    console.responsibility_warning()
 
     if not cfg.create_policy:
         console.banner("info", "Propose-only run (--no-create-policy). Nothing was written.")
