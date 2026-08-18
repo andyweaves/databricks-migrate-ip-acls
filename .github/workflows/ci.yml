@@ -18,6 +18,7 @@ jobs:
         with:
           python-version: "3.11"
           enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
       - run: uv sync
       - name: ruff
         run: uv run ruff check src/ tests/
@@ -36,6 +37,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
       - run: uv sync
       - name: pytest + coverage
         run: uv run pytest --cov=dbx_migrate_ip_acls --cov-report=xml --cov-report=term-missing
@@ -45,4 +47,6 @@ jobs:
         with:
           files: ./coverage.xml
           fail_ci_if_error: false
-        # Public repo → tokenless upload. (If Codecov ever requires it, add a CODECOV_TOKEN secret.)
+          # Codecov requires an upload token even for public repos. Add the repo's token as a
+          # CODECOV_TOKEN Actions secret (Codecov → repo settings) for the badge/reports to populate.
+          token: ${{ secrets.CODECOV_TOKEN }}
