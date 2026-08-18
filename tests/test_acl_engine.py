@@ -172,6 +172,8 @@ def test_acl_preview_block_target():
     a = acl_core.analyze(cfg, ws)
     prev = acl_core.preview_block(a, cfg)
     assert "ingress_dry_run" in prev
+    # the preview mirrors the full policy body, incl. the permissive FULL_ACCESS egress default
+    assert prev["egress"]["network_access"]["restriction_mode"] == "FULL_ACCESS"
 
 
 def test_ip_acl_enforcement_state_reads_toggle():

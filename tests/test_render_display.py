@@ -14,7 +14,16 @@ def _acl_analysis_obj(disabled=True):
         disabled_acls=(
             [{"label": "old-vpn", "list_type": "ALLOW", "ip_addresses": ["1.2.3.4/32"]}] if disabled else []
         ),
+        allow_specs=[{"label": "office", "cidrs": ["8.8.8.8/32"]}],  # office (enabled) is migrated
+        deny_specs=[],
     )
+
+
+def _squash(out: str) -> str:
+    """Strip ANSI + panel borders + whitespace so wrapped/folded table cells stay matchable."""
+    import re
+
+    return re.sub(r"[\s│|╭╮╰╯─┃┏┓┗┛┡┩╇━┳┻┼╈]+", "", re.sub(r"\x1b\[[0-9;]*m", "", out))
 
 
 def test_acl_disabled_notice_flags_disabled_rules(capsys):
@@ -35,9 +44,31 @@ def test_acl_current_config_shows_enabled_and_disabled(capsys):
     assert "(DISABLED)" in out  # header reflects workspace enforcement state (default off)
 
 
+def test_acl_current_config_has_will_be_migrated_column(capsys, monkeypatch):
+    # widen the console so the extra column's header/cells don't fold, keeping assertions stable
+    monkeypatch.setattr(console.console, "_width", 240)
+    render.acl_current_config(_acl_analysis_obj(disabled=True))
+    out = _squash(capsys.readouterr().out)
+    assert "will_be_migrated" in out  # the new column is present
+
+
 def test_acl_current_config_header_reflects_enabled_state(capsys):
     render.acl_current_config(_acl_analysis_obj(disabled=False), workspace_enabled=True)
     assert "(ENABLED)" in capsys.readouterr().out
+
+
+def test_acl_preview_shows_egress_block_and_full_access_warning(capsys):
+    from dbx_migrate_ip_acls.config import AclConfig
+
+    preview = {
+        "ingress": {"public_access": {"restriction_mode": "RESTRICTED_ACCESS"}},
+        "egress": {"network_access": {"restriction_mode": "FULL_ACCESS"}},
+    }
+    render.acl_preview(preview, AclConfig(policy_mode="enforce"))
+    out = capsys.readouterr().out.lower()
+    assert "restricted_access" in out  # ingress block shown
+    assert "full_access" in out  # egress block shown
+    assert "unrestricted" in out and "egress" in out  # the FULL_ACCESS warning is present
 
 
 def test_acl_decisions_renders(capsys):
