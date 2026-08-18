@@ -266,6 +266,31 @@ def enable_ip_access_lists(workspace_client, note: Note = lambda _m: None) -> bo
     return True
 
 
+def enable_disabled_lists(workspace_client, labels) -> tuple[int, list[str]]:
+    """Re-enable the individual IP access lists whose label is in `labels` and are currently
+    disabled. Returns (enabled_count, failures) where each failure is "<label>: <reason>". Enabling
+    an ALLOW list only *adds* allowed IPs so it can't lock the caller out; a BLOCK list containing
+    the caller's IP can be rejected by the API's self-lockout guard, which is captured as a failure
+    rather than crashing the run."""
+    want = set(labels)
+    enabled, failures = 0, []
+    for acl in workspace_client.ip_access_lists.list():
+        if acl.label not in want or acl.enabled:
+            continue
+        try:
+            workspace_client.ip_access_lists.update(
+                ip_access_list_id=acl.list_id,
+                label=acl.label,
+                list_type=acl.list_type,
+                ip_addresses=list(acl.ip_addresses or []),
+                enabled=True,
+            )
+            enabled += 1
+        except Exception as e:  # noqa: BLE001 - report per-list; don't abort the whole migration
+            failures.append(f"{acl.label}: {str(e)[:200]}")
+    return enabled, failures
+
+
 def resolve_policy_id(cfg: AclConfig, workspace_id) -> str:
     """The new policy's id: the explicit/entered name (--policy-name, resolved by the CLI to the
     profile name when left blank), falling back to the workspace id if nothing was set. Slugified

@@ -48,8 +48,11 @@ def acl_current_config(analysis, workspace_enabled: bool = False) -> None:
     (ENABLED)/(DISABLED) suffix reflects the workspace-wide enforcement state."""
     state = "ENABLED" if workspace_enabled else "DISABLED"
     console.rule(f"Current IP access list configuration ({state})")
-    rows = [{**a, "enabled": True} for a in analysis.ip_acls] + [
-        {**a, "enabled": False} for a in analysis.disabled_acls
+    # Colour the `enabled` cell so disabled lists (which won't be migrated) clearly stand out: red
+    # False vs green True. (Rich markup renders in the terminal; it's stripped in non-TTY/captured
+    # output, leaving plain "True"/"False".)
+    rows = [{**a, "enabled": "[ok]True[/ok]"} for a in analysis.ip_acls] + [
+        {**a, "enabled": "[danger]False[/danger]"} for a in analysis.disabled_acls
     ]
     if rows:
         _acl_table(rows, f"IP access lists on workspace {analysis.workspace_id}")
@@ -66,17 +69,15 @@ def acl_analysis(analysis, cfg: AclConfig) -> None:
 
 
 def acl_disabled_notice(analysis) -> None:
-    """Shown in the final printout (below the old + new policy, before the write): flag any disabled
-    IP access list rules that were left out of the migration so the operator can vet them."""
+    """Flag any individually-disabled IP access lists that won't be migrated, so the operator can
+    vet them (the CLI then offers to re-enable and include them)."""
     if not analysis.disabled_acls:
         return
     names = ", ".join(a["label"] for a in analysis.disabled_acls)
     console.banner(
         "warn",
-        f"{len(analysis.disabled_acls)} rule(s) are disabled in IP access lists "
-        f"and were NOT migrated: {names}. Make sure you vet these rules — if any "
-        "should be enabled, exit this tool, enable them, and run the migration "
-        "again.",
+        f"{len(analysis.disabled_acls)} rule(s) are disabled in IP access lists and WILL NOT be "
+        f"migrated: {names}. Make sure you vet these rules before proceeding.",
     )
 
 
