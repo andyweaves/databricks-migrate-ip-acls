@@ -5,12 +5,35 @@ is the app callback, so it's invoked without a subcommand name (e.g. `[--profile
 
 from __future__ import annotations
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
 from dbx_migrate_ip_acls import cli
 
 runner = CliRunner()
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _squash(output: str) -> str:
+    """Strip ANSI codes, Rich panel borders, and all whitespace from CLI output. Typer renders
+    errors in a Rich panel whose width depends on the environment (CI has no TTY → 80 cols → it can
+    wrap and even hyphen-break a long `--flag` across lines). Squashing lets substring assertions on
+    error text stay stable regardless of wrapping."""
+    return re.sub(r"[\s│|╭╮╰╯─]+", "", _ANSI_RE.sub("", output))
+
+
+def _err_text(result) -> str:
+    """Squashed CLI error text, drawn from stdout AND stderr — Typer renders errors to a Rich
+    console on stderr, which newer Click keeps separate from `result.output`."""
+    text = result.output or ""
+    try:
+        text += result.stderr or ""
+    except ValueError:
+        pass  # this runner merged stderr into stdout — already covered by result.output
+    return _squash(text)
 
 
 def test_resolve_profile_passthrough():
@@ -217,14 +240,14 @@ def test_disable_without_create_is_rejected():
         cli.app, ["--profile", "test", "--no-create-policy", "--no-auto-assign", "--disable-existing-ip-acls"]
     )
     assert result.exit_code == 2
-    assert "disable-existing-ip-acls" in result.output
+    assert "disable-existing-ip-acls" in _err_text(result)
 
 
 def test_assign_without_create_is_rejected():
     # auto-assign with --no-create-policy is nonsensical (nothing to bind) -> rejected up front.
     result = runner.invoke(cli.app, ["--profile", "test", "--no-create-policy"])
     assert result.exit_code == 2
-    assert "auto-assign" in result.output
+    assert "auto-assign" in _err_text(result)
 
 
 def test_dry_run_disable_is_rejected():
@@ -234,7 +257,8 @@ def test_dry_run_disable_is_rejected():
         cli.app, ["--profile", "test", "--policy-mode", "dry_run", "--disable-existing-ip-acls"]
     )
     assert result.exit_code == 2
-    assert "dry_run" in result.output or "dry-run" in result.output
+    text = _err_text(result)
+    assert "dry_run" in text or "dry-run" in text
 
 
 class _FakeWsClient:
