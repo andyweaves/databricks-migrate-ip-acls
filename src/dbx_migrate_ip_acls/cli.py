@@ -106,15 +106,18 @@ def _ensure_account_id(conn: Connection, reason: str) -> None:
 
     if conn.account_id:
         return
-    msg = (
-        f"{reason} needs a Databricks account_id (numeric). Find it in the Account console "
-        "top-right user menu, or in the account-console URL after '/account/'."
-    )
     if not sys.stdin.isatty():
-        raise typer.BadParameter(f"{msg}\nPass --account-id <id> (non-interactive, so the CLI can't prompt).")
+        raise typer.BadParameter(
+            f"{reason} needs a Databricks account_id. Pass --account-id <id> (non-interactive, so "
+            "the CLI can't prompt)."
+        )
     import questionary
 
-    console.banner("info", msg)
+    console.banner(
+        "info",
+        "Please enter a Databricks account_id. You can find it in the Account console top-right "
+        "user menu, or in the account-console URL after 'account_id='.",
+    )
     entered = (questionary.text("Databricks account_id:").ask() or "").strip()
     if not entered:
         raise typer.Abort()
@@ -513,7 +516,8 @@ def _confirm_write(yes: bool) -> bool:
         return True
     return typer.confirm(
         typer.style(
-            "Review the proposed network policy rules above. Create/apply the network " "policy now?",
+            "Please review the proposed network policy rules above. Would you like to create/apply "
+            "the network policy now?",
             fg="yellow",
         ),
         default=False,
@@ -729,7 +733,7 @@ def _reconcile_disabled_lists(analysis, cfg: AclConfig, wc, yes: bool):
     labels = [a["label"] for a in analysis.disabled_acls]
     if not typer.confirm(
         typer.style(
-            f"Re-enable + include these {len(labels)} disabled list(s) in this migration?",
+            "Do you want to re-enable and include these rules in the migration?",
             fg="yellow",
         ),
         default=False,
@@ -740,7 +744,7 @@ def _reconcile_disabled_lists(analysis, cfg: AclConfig, wc, yes: bool):
     for f in failures:
         console.banner("warn", f"Couldn't re-enable {f}")
     if enabled:
-        console.banner("success", f"Re-enabled {enabled} IP access list(s) — including them now.")
+        console.banner("success", f"Re-enabled {enabled} IP access list(s) — including them in the migration")
         return acl_core.analyze(cfg, wc)
     return analysis
 

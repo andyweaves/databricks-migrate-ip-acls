@@ -66,8 +66,8 @@ def acl_disabled_notice(analysis) -> None:
     names = ", ".join(a["label"] for a in analysis.disabled_acls)
     console.banner(
         "warn",
-        f"{len(analysis.disabled_acls)} rule(s) are disabled in IP access lists and WILL NOT be "
-        f"migrated: {names}. Make sure you vet these rules before proceeding.",
+        f"{len(analysis.disabled_acls)} rule(s) are disabled and WILL NOT be migrated: {names}. "
+        "Make sure you review these rules carefully before proceeding.",
     )
 
 
