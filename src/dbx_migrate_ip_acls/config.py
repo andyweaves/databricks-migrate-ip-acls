@@ -20,6 +20,7 @@ MAX_POLICY_ID_LEN = 30
 class Connection:
     """How the CLI reaches the workspace + account. Auth itself is resolved by the SDK's unified
     auth (profile / env / OAuth); this only carries the selectors."""
+
     profile: str | None = None
     account_id: str = ""
     account_host: str = DEFAULT_ACCOUNT_HOST
@@ -65,8 +66,9 @@ def validate_disable_ip_acls(disable: bool, create_policy: bool, auto_assign: bo
         )
 
 
-def validate_acl_apply(create_policy: bool, auto_assign: bool, disable_existing_ip_acls: bool,
-                       policy_mode: str) -> None:
+def validate_acl_apply(
+    create_policy: bool, auto_assign: bool, disable_existing_ip_acls: bool, policy_mode: str
+) -> None:
     """Input-combination guards — reject nonsensical / unsafe flag combos up front."""
     # Can't assign a policy you're not creating.
     if auto_assign and not create_policy:

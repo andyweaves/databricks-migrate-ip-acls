@@ -11,8 +11,10 @@ def _acl_analysis_obj(disabled=True):
     return types.SimpleNamespace(
         workspace_id=42,
         ip_acls=[{"label": "office", "list_type": "ALLOW", "ip_addresses": ["8.8.8.8/32"]}],
-        disabled_acls=([{"label": "old-vpn", "list_type": "ALLOW", "ip_addresses": ["1.2.3.4/32"]}]
-                       if disabled else []))
+        disabled_acls=(
+            [{"label": "old-vpn", "list_type": "ALLOW", "ip_addresses": ["1.2.3.4/32"]}] if disabled else []
+        ),
+    )
 
 
 def test_acl_disabled_notice_flags_disabled_rules(capsys):
@@ -34,6 +36,7 @@ def test_acl_current_config_shows_enabled_and_disabled(capsys):
 
 def test_acl_decisions_renders(capsys):
     from dbx_migrate_ip_acls.config import AclConfig
+
     render.acl_decisions(AclConfig(policy_name="my-acl"))
     out = capsys.readouterr().out
     assert "migration configuration" in out.lower()
@@ -49,7 +52,9 @@ def test_decisions_panel_renders_flag_dash_names(capsys):
 def test_apply_results_reports_id_and_url(capsys):
     render.apply_results(
         [{"target": "single", "action": "created", "policy_id": "np-helper"}],
-        account_host="https://accounts.cloud.databricks.com", account_id="ACC")
+        account_host="https://accounts.cloud.databricks.com",
+        account_id="ACC",
+    )
     out = capsys.readouterr().out
     assert "network policy id: np-helper" in out
     assert "network-access-policies/np-helper?account_id=ACC" in out
@@ -70,8 +75,10 @@ def test_apply_results_reports_errors(capsys):
 
 def test_policy_url_format():
     url = render.policy_url("https://accounts.cloud.databricks.com", "ACC123", "np-helper")
-    assert url == ("https://accounts.cloud.databricks.com/security/networking/"
-                   "network-access-policies/np-helper?account_id=ACC123")
+    assert url == (
+        "https://accounts.cloud.databricks.com/security/networking/"
+        "network-access-policies/np-helper?account_id=ACC123"
+    )
 
 
 def test_policy_url_strips_trailing_slash():

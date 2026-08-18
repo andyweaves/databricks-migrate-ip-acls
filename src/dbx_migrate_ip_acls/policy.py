@@ -41,8 +41,11 @@ def build_ingress_rule(spec: dict, mode_label: str | None):
         CustomerFacingIngressNetworkPolicyRequestDestination as Destination,
     )
 
-    origin = (Origin(all_ip_ranges=True) if spec.get("catch_all")
-              else Origin(included_ip_ranges=IpRanges(ip_ranges=list(spec["cidrs"]))))
+    origin = (
+        Origin(all_ip_ranges=True)
+        if spec.get("catch_all")
+        else Origin(included_ip_ranges=IpRanges(ip_ranges=list(spec["cidrs"])))
+    )
 
     if spec.get("destination") == "apps_runtime":
         destination = Destination(apps_runtime=AppsDest(all_destinations=True))
@@ -55,21 +58,32 @@ def build_ingress_rule(spec: dict, mode_label: str | None):
     # (Apps / Lakebase / all_destinations support only all users + service principals). Only attach
     # per-identity authentication where the destination can carry it.
     authentication = None
-    if (spec.get("destination") not in _DESTINATIONS_WITHOUT_AUTH
-            and spec.get("identity_type") == "SELECTED_IDENTITIES" and spec.get("identities")):
+    if (
+        spec.get("destination") not in _DESTINATIONS_WITHOUT_AUTH
+        and spec.get("identity_type") == "SELECTED_IDENTITIES"
+        and spec.get("identities")
+    ):
         identities = [
             Identity(
                 principal_id=i["principal_id"],
-                principal_type=(PrincipalType.PRINCIPAL_TYPE_USER if i["principal_type"] == "USER"
-                                else PrincipalType.PRINCIPAL_TYPE_SERVICE_PRINCIPAL),
+                principal_type=(
+                    PrincipalType.PRINCIPAL_TYPE_USER
+                    if i["principal_type"] == "USER"
+                    else PrincipalType.PRINCIPAL_TYPE_SERVICE_PRINCIPAL
+                ),
             )
             for i in spec["identities"]
         ]
         authentication = Auth(
-            identity_type=IdentityType.IDENTITY_TYPE_SELECTED_IDENTITIES, identities=identities)
+            identity_type=IdentityType.IDENTITY_TYPE_SELECTED_IDENTITIES, identities=identities
+        )
 
-    return Rule(label=_rule_label(spec, mode_label),
-                origin=origin, destination=destination, authentication=authentication)
+    return Rule(
+        label=_rule_label(spec, mode_label),
+        origin=origin,
+        destination=destination,
+        authentication=authentication,
+    )
 
 
 def build_deny_rule(spec: dict, mode_label: str | None):
@@ -79,13 +93,17 @@ def build_deny_rule(spec: dict, mode_label: str | None):
         CustomerFacingIngressNetworkPolicyPublicRequestOrigin as Origin,
         CustomerFacingIngressNetworkPolicyRequestDestination as Destination,
     )
-    return Rule(label=_rule_label(spec, mode_label),
-                origin=Origin(included_ip_ranges=IpRanges(ip_ranges=list(spec["cidrs"]))),
-                destination=Destination(all_destinations=True))
+
+    return Rule(
+        label=_rule_label(spec, mode_label),
+        origin=Origin(included_ip_ranges=IpRanges(ip_ranges=list(spec["cidrs"]))),
+        destination=Destination(all_destinations=True),
+    )
 
 
-def build_ingress_block(allow: list[dict], deny: list[dict], mode_label: str | None,
-                        note: Note = lambda _m: None):
+def build_ingress_block(
+    allow: list[dict], deny: list[dict], mode_label: str | None, note: Note = lambda _m: None
+):
     """Assemble a CustomerFacingIngressNetworkPolicy from allow specs (+ optional deny specs).
 
     RESTRICTED_ACCESS is default-DENY; if a policy ends up with deny rules but no allow rules,
@@ -96,12 +114,22 @@ def build_ingress_block(allow: list[dict], deny: list[dict], mode_label: str | N
         CustomerFacingIngressNetworkPolicyPublicAccess as PublicAccess,
         CustomerFacingIngressNetworkPolicyPublicAccessRestrictionMode as RestrictionMode,
     )
+
     allow = list(allow)
     if (deny or []) and not allow:
-        allow = [{"label": "allow-all", "catch_all": True,
-                  "destination": "all_destinations", "identity_type": "ALL_USERS", "identities": []}]
-        note("Policy has deny rules but no allow rules — added a catch-all allow (all public IPs) "
-             "so non-denied traffic is still permitted (default-allow-except-blocked).")
+        allow = [
+            {
+                "label": "allow-all",
+                "catch_all": True,
+                "destination": "all_destinations",
+                "identity_type": "ALL_USERS",
+                "identities": [],
+            }
+        ]
+        note(
+            "Policy has deny rules but no allow rules — added a catch-all allow (all public IPs) "
+            "so non-denied traffic is still permitted (default-allow-except-blocked)."
+        )
 
     public = PublicAccess(
         restriction_mode=RestrictionMode.RESTRICTED_ACCESS,
@@ -119,6 +147,7 @@ def build_full_access_egress():
         EgressNetworkPolicyNetworkAccessPolicyRestrictionMode as EgressRestriction,
         NetworkPolicyEgress,
     )
+
     return NetworkPolicyEgress(network_access=EgressAccess(restriction_mode=EgressRestriction.FULL_ACCESS))
 
 
@@ -126,11 +155,13 @@ def build_full_access_egress():
 def _slug(text: str) -> str:
     """Normalise a free-form label (e.g. a profile name) into a policy-id-safe slug."""
     import re
+
     return re.sub(r"[^a-z0-9-]+", "-", (text or "").lower()).strip("-")
 
 
-def policy_name(name_prefix: str, workspace_id: int | None = None, suffix: str | None = None,
-                explicit: str | None = None) -> str:
+def policy_name(
+    name_prefix: str, workspace_id: int | None = None, suffix: str | None = None, explicit: str | None = None
+) -> str:
     """Deterministic policy id, truncated to the id length limit while preserving the suffix:
       all_workspaces   -> <prefix>
       per_workspace    -> <prefix>-ws-<id>       (workspace_id given)

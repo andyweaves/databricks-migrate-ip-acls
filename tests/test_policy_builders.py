@@ -6,8 +6,13 @@ from dbx_migrate_ip_acls import policy
 
 
 def _allow(**kw):
-    base = {"label": "r", "cidrs": ["1.2.3.4/32"], "destination": "all_destinations",
-            "identity_type": "ALL_USERS", "identities": []}
+    base = {
+        "label": "r",
+        "cidrs": ["1.2.3.4/32"],
+        "destination": "all_destinations",
+        "identity_type": "ALL_USERS",
+        "identities": [],
+    }
     base.update(kw)
     return base
 
@@ -35,8 +40,10 @@ def test_ingress_rule_apps_and_lakebase_destinations():
 def test_ingress_rule_selected_identities_auth_omitted_on_broad_destinations():
     # The CBI API rejects an authentication block on Apps / Lakebase / all_destinations rules, so
     # even with SELECTED_IDENTITIES the builder must omit it (otherwise apply 400s).
-    ids = [{"principal_id": 42, "principal_type": "USER"},
-           {"principal_id": 7, "principal_type": "SERVICE_PRINCIPAL"}]
+    ids = [
+        {"principal_id": 42, "principal_type": "USER"},
+        {"principal_id": 7, "principal_type": "SERVICE_PRINCIPAL"},
+    ]
     for dest in ("all_destinations", "apps_runtime", "lakebase_runtime"):
         spec = _allow(destination=dest, identity_type="SELECTED_IDENTITIES", identities=ids)
         rule = policy.build_ingress_rule(spec, "enforced").as_dict()
@@ -58,8 +65,11 @@ def test_deny_rule_shape():
 def test_deny_without_allow_injects_catch_all():
     notes = []
     block = policy.build_ingress_block(
-        allow=[], deny=[{"label": "np-deny", "cidrs": ["9.9.9.0/24"]}],
-        mode_label="dry-run", note=notes.append).as_dict()
+        allow=[],
+        deny=[{"label": "np-deny", "cidrs": ["9.9.9.0/24"]}],
+        mode_label="dry-run",
+        note=notes.append,
+    ).as_dict()
     pub = block["public_access"]
     assert pub["allow_rules"][0]["origin"]["all_ip_ranges"] is True
     assert pub["deny_rules"]
@@ -69,8 +79,11 @@ def test_deny_without_allow_injects_catch_all():
 def test_allow_with_deny_no_catch_all():
     notes = []
     block = policy.build_ingress_block(
-        allow=[_allow()], deny=[{"label": "d", "cidrs": ["9.9.9.0/24"]}],
-        mode_label="dry-run", note=notes.append).as_dict()
+        allow=[_allow()],
+        deny=[{"label": "d", "cidrs": ["9.9.9.0/24"]}],
+        mode_label="dry-run",
+        note=notes.append,
+    ).as_dict()
     pub = block["public_access"]
     assert len(pub["allow_rules"]) == 1
     assert pub["allow_rules"][0]["origin"].get("all_ip_ranges") is None

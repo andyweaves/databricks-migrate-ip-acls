@@ -11,9 +11,11 @@ _POLICY = {
         "public_access": {
             "restriction_mode": "RESTRICTED_ACCESS",
             "allow_rules": [
-                {"label": "office",
-                 "origin": {"included_ip_ranges": {"ip_ranges": ["8.8.8.8/32", "9.9.9.9/32"]}},
-                 "destination": {"all_destinations": True}},
+                {
+                    "label": "office",
+                    "origin": {"included_ip_ranges": {"ip_ranges": ["8.8.8.8/32", "9.9.9.9/32"]}},
+                    "destination": {"all_destinations": True},
+                },
             ],
             "deny_rules": [],
         }
@@ -39,8 +41,8 @@ def test_hcl_renders_nested_blocks_and_lists():
 
 def test_hcl_omits_account_id_and_empty_lists():
     hcl = terraform.network_policy_hcl(_POLICY)
-    assert "acc-123" not in hcl          # account_id dropped (provider supplies it)
-    assert "deny_rules" not in hcl       # empty list omitted
+    assert "acc-123" not in hcl  # account_id dropped (provider supplies it)
+    assert "deny_rules" not in hcl  # empty list omitted
 
 
 def test_hcl_tf_name_falls_back_when_id_not_identifier():

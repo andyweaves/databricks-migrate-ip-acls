@@ -45,8 +45,12 @@ MAX_TABLE_ROWS = 100
 
 def banner(kind: str, message: str) -> None:
     """Print a one-line severity banner. kind in {info, warn, danger, success}."""
-    glyphs = {"info": ("ℹ️ ", "info"), "warn": ("⚠️ ", "warn"),
-              "danger": ("⛔ ", "danger"), "success": ("✅ ", "ok")}
+    glyphs = {
+        "info": ("ℹ️ ", "info"),
+        "warn": ("⚠️ ", "warn"),
+        "danger": ("⛔ ", "danger"),
+        "success": ("✅ ", "ok"),
+    }
     glyph, style = glyphs.get(kind, ("", "value"))
     console.print(Text(f"{glyph}{message}", style=style))
 
@@ -69,12 +73,14 @@ def workspace_panel(profile: str, host: str, workspace_id: Any) -> None:
     id), so the user is never in doubt about the target before analysis or any write."""
     body = Text()
     body.append("This run will analyse and (if you apply) modify:\n\n", style="heading")
-    for label, value in (("profile      ", profile), ("workspace URL", host),
-                         ("workspace id ", workspace_id)):
+    for label, value in (
+        ("profile      ", profile),
+        ("workspace URL", host),
+        ("workspace id ", workspace_id),
+    ):
         body.append(f"  {label}  ", style="key")
         body.append(f"{value}\n", style="value")
-    console.print(Panel(body, title="[brand]Target workspace[/brand]", border_style="brand",
-                        expand=False))
+    console.print(Panel(body, title="[brand]Target workspace[/brand]", border_style="brand", expand=False))
 
 
 def decisions_panel(title: str, rows: list[tuple[str, Any, str]]) -> None:
@@ -100,15 +106,21 @@ def _fmt_value(value: Any) -> str:
     return str(value)
 
 
-def dataframe(df: pd.DataFrame, title: str, max_rows: int = MAX_TABLE_ROWS,
-              highlight_col: str | None = None) -> None:
+def dataframe(
+    df: pd.DataFrame, title: str, max_rows: int = MAX_TABLE_ROWS, highlight_col: str | None = None
+) -> None:
     """Render a pandas DataFrame as a Rich table, capped to `max_rows`. If `highlight_col` is given
     and truthy for a row, that row is styled as a warning (used for the threat-match table)."""
     if df is None or df.empty:
         console.print(f"[muted]{title}: (no rows)[/muted]")
         return
-    table = Table(title=f"[heading]{title}[/heading]", header_style="heading",
-                  title_style="heading", show_lines=False, expand=False)
+    table = Table(
+        title=f"[heading]{title}[/heading]",
+        header_style="heading",
+        title_style="heading",
+        show_lines=False,
+        expand=False,
+    )
     for col in df.columns:
         table.add_column(str(col), overflow="fold")
     shown = df.head(max_rows)
@@ -117,8 +129,10 @@ def dataframe(df: pd.DataFrame, title: str, max_rows: int = MAX_TABLE_ROWS,
         table.add_row(*[_cell(v) for v in row], style=style)
     console.print(table)
     if len(df) > max_rows:
-        console.print(f"[muted]… showing {max_rows:,} of {len(df):,} rows "
-                      f"(use --output to write the full result).[/muted]")
+        console.print(
+            f"[muted]… showing {max_rows:,} of {len(df):,} rows "
+            f"(use --output to write the full result).[/muted]"
+        )
 
 
 def _cell(value: Any) -> str:
@@ -135,8 +149,9 @@ def _cell(value: Any) -> str:
 
 def json_panel(title: str, obj: Any) -> None:
     """Syntax-highlighted JSON preview of a policy block (nothing is sent — preview only)."""
-    console.print(Panel(JSON(json.dumps(obj)), title=f"[heading]{title}[/heading]",
-                        border_style="info", expand=False))
+    console.print(
+        Panel(JSON(json.dumps(obj)), title=f"[heading]{title}[/heading]", border_style="info", expand=False)
+    )
 
 
 @contextmanager
@@ -155,6 +170,9 @@ def responsibility_warning() -> None:
         "You are solely responsible for reviewing every entry and confirming it is accurate and "
         "appropriate before using it in a policy — whether you create it here or copy this JSON to "
         "create it elsewhere. An incorrect or incomplete allow-list can block legitimate users or "
-        "workloads (in enforce mode) or fail to block malicious ones.", style="value")
-    console.print(Panel(body, title="[danger]Your responsibility[/danger]",
-                        border_style="danger", expand=False))
+        "workloads (in enforce mode) or fail to block malicious ones.",
+        style="value",
+    )
+    console.print(
+        Panel(body, title="[danger]Your responsibility[/danger]", border_style="danger", expand=False)
+    )
