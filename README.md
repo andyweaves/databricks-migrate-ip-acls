@@ -190,6 +190,15 @@ credentials resolvable by unified auth for the account host (an account-admin se
 OAuth M2M is the recommended path). A workspace-only OAuth session **cannot** call the account API —
 use `--account-profile` (or env) for account creds if your workspace profile can't.
 
+## 📈 Usage tracking
+
+At startup the tool registers `databricks-migrate-ip-acls/<version>` as a Databricks SDK
+[user-agent extra](https://databricks-sdk-py.readthedocs.io/), so it's appended to the `User-Agent`
+header of every API call it makes. That lets platform-side logs attribute API traffic to this tool.
+It adds only the tool name + version — no arguments, workspace data, or PII. Granularity is
+**workspace-level**: cluster ids are redacted in the request logs, so per-DBU attribution isn't
+possible. See `usage.py`.
+
 ## 🗂️ Repo layout
 
 | Path | What |
@@ -198,6 +207,7 @@ use `--account-profile` (or env) for account creds if your workspace profile can
 | `src/dbx_migrate_ip_acls/acl.py` | The migration engine + network-policy state queries. |
 | `src/dbx_migrate_ip_acls/policy.py` | SDK dataclass builders + policy-id naming. |
 | `src/dbx_migrate_ip_acls/terraform.py` | Best-effort Terraform (HCL) rendering of the proposed policy. |
+| `src/dbx_migrate_ip_acls/usage.py` | Registers the tool name in the SDK User-Agent (usage tracking). |
 | `src/dbx_migrate_ip_acls/{config,auth,console,render,tls}.py` | Config/validation, auth, Rich UI, presentation, OS-trust-store TLS. |
 | `tests/` | Offline unit tests (fakes/monkeypatch — no network). |
 
