@@ -237,7 +237,7 @@ def _confirm_workspace(conn: Connection, yes: bool):
     if yes or not sys.stdin.isatty():
         return wc
     if not typer.confirm(
-            typer.style("Is this the correct workspace to analyse / modify?", fg="yellow"),
+            typer.style("Is this the correct workspace to migrate?", fg="yellow"),
             default=True):
         console.banner("info", "Aborted — re-run with the intended --profile.")
         raise typer.Exit(code=0)
@@ -417,13 +417,13 @@ def _confirm_params(yes: bool) -> None:
         raise typer.Exit(code=0)
 
 
-def _confirm_write(cfg_mode: str, yes: bool) -> bool:
+def _confirm_write(yes: bool) -> bool:
     """The write gate. Returns True if the user has confirmed (or --yes given)."""
     if yes:
         return True
-    console.mode_banner(cfg_mode)
     return typer.confirm(
-        typer.style("Review the proposed rules above. Create/apply the policy now?", fg="yellow"),
+        typer.style("Review the proposed network policy rules above. Create/apply the network "
+                    "policy now?", fg="yellow"),
         default=False)
 
 
@@ -616,7 +616,7 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     preview = acl_core.preview_block(analysis, cfg, note=lambda m: console.banner("info", m))
     render.acl_preview(preview, cfg)
     render.acl_disabled_notice(analysis)   # below [old]/[new], before create: vet disabled rules
-    console.responsibility_warning("IP access list entries")
+    console.responsibility_warning()
 
     if cfg.export:
         _export_policy(cfg.export, acl_core.policy_payload(analysis, cfg, conn.account_id))
@@ -625,7 +625,7 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     if not cfg.create_policy:
         console.banner("info", "Propose-only run (--no-create-policy). Nothing was written.")
         return
-    if not _confirm_write(cfg.policy_mode, yes):
+    if not _confirm_write(yes):
         console.banner("info", "Aborted — nothing written.")
         return
 

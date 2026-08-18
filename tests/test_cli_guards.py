@@ -98,17 +98,17 @@ def test_checkpoint_decline_aborts_cleanly(monkeypatch):
 
 
 def test_confirm_write_yes_proceeds():
-    assert cli._confirm_write("dry_run", yes=True) is True
+    assert cli._confirm_write(yes=True) is True
 
 
 def test_confirm_write_interactive_decline(monkeypatch):
     monkeypatch.setattr("typer.confirm", lambda *a, **k: False)
-    assert cli._confirm_write("enforce", yes=False) is False
+    assert cli._confirm_write(yes=False) is False
 
 
 def test_responsibility_warning_shown(capsys):
     from dbx_migrate_ip_acls import console
-    console.responsibility_warning("IP access list entries")
+    console.responsibility_warning()
     out = capsys.readouterr().out
     assert "responsib" in out.lower()
     assert "security-enforcing" in out.lower()
