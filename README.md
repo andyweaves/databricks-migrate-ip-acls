@@ -45,6 +45,43 @@ Auth is the Databricks SDK's unified auth (`--profile`, `DATABRICKS_*` env, or O
 **Account-admin credentials are always required** — the pre-checks and create/assign are all
 account-level (see *Account access* below).
 
+## 🏗️ Architecture
+
+At a high level: the CLI reads the workspace's IP access lists through a **workspace client**, and
+does every check + write through an **account-admin client** against the Databricks **account** APIs.
+The engine turns the ACL into a CBI policy dataclass, which is previewed, optionally exported
+(JSON + Terraform), and — once you confirm — created and bound to the workspace.
+
+```mermaid
+flowchart LR
+    U(["You"]) --> CLI["<b>dbx-migrate-ip-acls</b><br/>Typer CLI · review gates"]
+
+    subgraph TOOL["dbx_migrate_ip_acls"]
+        direction TB
+        CLI --> AUTH["auth · unified auth<br/>(profile / env / OAuth)"]
+        AUTH --> WSC["Workspace client"]
+        AUTH --> ACC["Account client<br/>(account admin)"]
+        CLI --> ENG["acl.py — analyze → build<br/>policy.py — CBI SDK builders"]
+        ENG --> EXP["export<br/>JSON + Terraform"]
+    end
+
+    WSC -->|"read IP access lists +<br/>enableIpAccessLists toggle"| WAPI["Databricks<br/>Workspace API"]
+    ENG -. builds policy .-> ACC
+    ACC -->|"pre-checks: PrivateLink /<br/>assigned policy · create + assign"| AAPI["Databricks<br/>Account API"]
+    EXP -. writes .-> FILES[["&lt;policy-id&gt;.json<br/>&lt;policy-id&gt;.tf"]]
+
+    classDef you fill:#e2e3e5,stroke:#6c757d,color:#111
+    classDef cli fill:#d1e7dd,stroke:#146c43,color:#111
+    classDef comp fill:#cfe2ff,stroke:#0d6efd,color:#111
+    classDef ext fill:#fff3cd,stroke:#997404,color:#111
+    classDef file fill:#f8f9fa,stroke:#6c757d,color:#111
+    class U you
+    class CLI cli
+    class AUTH,WSC,ACC,ENG,EXP comp
+    class WAPI,AAPI ext
+    class FILES file
+```
+
 ## 🗺️ How it flows
 
 ```mermaid

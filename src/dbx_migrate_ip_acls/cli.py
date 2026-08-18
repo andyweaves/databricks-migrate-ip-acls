@@ -123,23 +123,83 @@ def _profile_config_error(e: Exception, profile: str | None, flag: str) -> None:
     raise typer.Exit(code=1) from None
 
 
-def _workspace_client_or_exit(conn: Connection):
-    """Build the workspace client, converting a config/profile ValueError into a clean CLI error."""
-    from . import auth
+def _is_expired_auth(msg: str) -> bool:
+    """True if an SDK auth error looks like expired / invalid Databricks-CLI credentials that a
+    `databricks auth login` would fix — as opposed to a mistyped profile or missing config."""
+    m = msg.lower()
+    return ("reauthenticate" in m or "refresh token" in m or "cannot get access token" in m
+            or "databricks auth login" in m)
+
+
+def _reauthenticate(profile: str) -> bool:
+    """Offer to run `databricks auth login --profile <profile>` and return True if it succeeded (so
+    the caller can retry building the client). Returns False — after printing the command to run —
+    when non-interactive, when the user declines, when the databricks CLI isn't on PATH, or when the
+    login doesn't complete."""
+    import shutil
+    import subprocess
+    import sys
+
+    cmd = f"databricks auth login --profile {profile}"
+    console.banner("warn", f"The credentials for profile '{profile}' have expired (or its refresh "
+                           "token is invalid).")
+    if not sys.stdin.isatty():
+        console.banner("info", f"Re-authenticate, then re-run: {cmd}")
+        return False
+    if not typer.confirm(
+            typer.style(f"Re-authenticate now? This runs `{cmd}` and opens a browser.", fg="yellow"),
+            default=True):
+        console.banner("info", f"Re-authenticate when ready, then re-run: {cmd}")
+        return False
+    if shutil.which("databricks") is None:
+        console.banner("danger", "The `databricks` CLI isn't on your PATH — install it "
+                                 "(https://docs.databricks.com/dev-tools/cli/install), then run: "
+                                 f"{cmd}")
+        return False
+    console.banner("info", f"Running `{cmd}` …")
     try:
-        return auth.workspace_client(conn)
+        result = subprocess.run(["databricks", "auth", "login", "--profile", profile])
+    except OSError as e:  # noqa: BLE001 - surface a clean message, don't crash
+        console.banner("danger", f"Couldn't launch the databricks CLI: {e}. Run manually: {cmd}")
+        return False
+    if result.returncode != 0:
+        console.banner("danger", f"Re-authentication didn't complete (exit {result.returncode}). "
+                                 f"Run it manually, then re-run: {cmd}")
+        return False
+    console.banner("success", "Re-authenticated — continuing.")
+    return True
+
+
+def _client_or_exit(build, profile: str | None, flag: str):
+    """Build a Databricks client, turning a config/auth ValueError into a clean CLI error. If the
+    failure is expired CLI credentials and a profile is set, offer to re-authenticate and retry the
+    build once; any other ValueError (or a declined/failed re-auth) exits cleanly."""
+    try:
+        return build()
     except ValueError as e:
-        _profile_config_error(e, conn.profile, "--profile")
+        if profile and _is_expired_auth(str(e)) and _reauthenticate(profile):
+            try:
+                return build()
+            except ValueError as e2:
+                _profile_config_error(e2, profile, flag)
+        _profile_config_error(e, profile, flag)
+
+
+def _workspace_client_or_exit(conn: Connection):
+    """Build the workspace client, converting a config/profile ValueError into a clean CLI error
+    (and offering re-auth on expired credentials)."""
+    from . import auth
+    return _client_or_exit(lambda: auth.workspace_client(conn), conn.profile, "--profile")
 
 
 def _account_client_or_exit(conn: Connection):
-    """Build the account client, converting a config/profile ValueError into a clean CLI error."""
+    """Build the account client, converting a config/profile ValueError into a clean CLI error
+    (and offering re-auth on expired credentials)."""
     from . import auth
-    try:
-        return auth.account_client(conn)
-    except ValueError as e:
-        _profile_config_error(e, conn.account_profile or conn.profile,
-                              "--account-profile" if conn.account_profile else "--profile")
+    return _client_or_exit(
+        lambda: auth.account_client(conn),
+        conn.account_profile or conn.profile,
+        "--account-profile" if conn.account_profile else "--profile")
 
 
 def _confirm_workspace(conn: Connection, yes: bool):
@@ -486,7 +546,7 @@ def migrate(
         help="Non-interactive mode: skip all prompts — the step-through pauses between sections and "
              "the review/write gates. Use for scripted runs."),
 ):
-    """Recreate this workspace's existing IP access list as a CBI network policy, verbatim."""
+    """Migrate this workspace's IP access list to a new CBI network policy."""
     from . import tls
     tls.enable()
     cfg = AclConfig(
@@ -508,7 +568,7 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
         raise typer.BadParameter(str(e)) from None
 
     console.title_panel("IP Access List → CBI migration",
-                        "Recreate this workspace's IP ACL as a CBI policy, verbatim.")
+                        "Migrate this workspace's IP ACL to a new CBI policy.")
     wc = _confirm_workspace(conn, yes)
 
     # Read the workspace's IP access lists + enforcement state up front, and decide whether there's
