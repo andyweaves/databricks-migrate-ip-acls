@@ -623,3 +623,128 @@ def test_write_json_export_bad_path_errors_cleanly(tmp_path):
     with pytest.raises(typer.Exit) as e:
         cli._write_json_export(str(afile / "policy.json"), {"network_policy_id": "p"})
     assert e.value.exit_code == 1
+
+
+# --- expired-credentials detection + offer-to-reauthenticate -----------------------------------
+
+_EXPIRED = ("default auth: databricks-cli: cannot get access token: Error: A new access token could "
+            "not be retrieved because the refresh token is invalid. To reauthenticate, run the "
+            "following command:\n  $ databricks auth login --profile p")
+
+
+def test_is_expired_auth_detects_and_ignores():
+    assert cli._is_expired_auth(_EXPIRED)
+    assert cli._is_expired_auth("databricks-cli: cannot get access token")
+    # not expiry — a mistyped profile or missing config must NOT be treated as re-auth
+    assert not cli._is_expired_auth("default auth: cannot configure default credentials")
+    assert not cli._is_expired_auth("resolve: /x/.databrickscfg has no p profile configured")
+
+
+def test_workspace_client_expired_offers_reauth_and_retries(monkeypatch):
+    import subprocess
+
+    import dbx_migrate_ip_acls.auth as auth
+    from dbx_migrate_ip_acls.config import Connection
+
+    calls = {"n": 0}
+    sentinel = object()
+
+    def _build(conn):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError(_EXPIRED)
+        return sentinel
+
+    monkeypatch.setattr(auth, "workspace_client", _build)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: True)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/databricks")
+    ran = {}
+
+    def _run(argv, *a, **k):
+        ran["argv"] = argv
+        return type("R", (), {"returncode": 0})()
+    monkeypatch.setattr(subprocess, "run", _run)
+
+    wc = cli._workspace_client_or_exit(Connection(profile="p"))
+    assert wc is sentinel                                   # retried build returned the client
+    assert calls["n"] == 2                                  # built again after re-auth
+    assert ran["argv"] == ["databricks", "auth", "login", "--profile", "p"]
+
+
+def test_expired_decline_exits_with_command(monkeypatch, capsys):
+    import typer
+
+    import dbx_migrate_ip_acls.auth as auth
+    from dbx_migrate_ip_acls.config import Connection
+    monkeypatch.setattr(auth, "workspace_client", lambda conn: (_ for _ in ()).throw(
+        ValueError(_EXPIRED)))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: False)   # user declines
+    with pytest.raises(typer.Exit) as e:
+        cli._workspace_client_or_exit(Connection(profile="p"))
+    assert e.value.exit_code == 1
+    assert "databricks auth login --profile p" in capsys.readouterr().out
+
+
+def test_expired_noninteractive_prints_command_and_exits(monkeypatch, capsys):
+    import typer
+
+    import dbx_migrate_ip_acls.auth as auth
+    from dbx_migrate_ip_acls.config import Connection
+    monkeypatch.setattr(auth, "workspace_client", lambda conn: (_ for _ in ()).throw(
+        ValueError(_EXPIRED)))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)       # non-interactive: never launch a browser
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: (_ for _ in ()).throw(
+        AssertionError("must not prompt non-interactively")))
+    with pytest.raises(typer.Exit) as e:
+        cli._workspace_client_or_exit(Connection(profile="p"))
+    assert e.value.exit_code == 1
+    assert "databricks auth login --profile p" in capsys.readouterr().out
+
+
+def test_expired_databricks_cli_not_on_path_exits(monkeypatch, capsys):
+    import typer
+
+    import dbx_migrate_ip_acls.auth as auth
+    from dbx_migrate_ip_acls.config import Connection
+    monkeypatch.setattr(auth, "workspace_client", lambda conn: (_ for _ in ()).throw(
+        ValueError(_EXPIRED)))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: True)
+    monkeypatch.setattr("shutil.which", lambda name: None)        # databricks CLI missing
+    with pytest.raises(typer.Exit) as e:
+        cli._workspace_client_or_exit(Connection(profile="p"))
+    assert e.value.exit_code == 1
+    assert "PATH" in capsys.readouterr().out
+
+
+def test_expired_account_client_uses_account_profile(monkeypatch):
+    # the same retry path applies to the account client, keyed on --account-profile.
+    import subprocess
+
+    import dbx_migrate_ip_acls.auth as auth
+    from dbx_migrate_ip_acls.config import Connection
+
+    calls = {"n": 0}
+    sentinel = object()
+
+    def _build(conn):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ValueError(_EXPIRED)
+        return sentinel
+
+    monkeypatch.setattr(auth, "account_client", _build)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("typer.confirm", lambda *a, **k: True)
+    monkeypatch.setattr("shutil.which", lambda name: "/usr/bin/databricks")
+    ran = {}
+
+    def _run(argv, *a, **k):
+        ran["argv"] = argv
+        return type("R", (), {"returncode": 0})()
+    monkeypatch.setattr(subprocess, "run", _run)
+    acc = cli._account_client_or_exit(Connection(account_profile="acct"))
+    assert acc is sentinel
+    assert ran["argv"] == ["databricks", "auth", "login", "--profile", "acct"]
