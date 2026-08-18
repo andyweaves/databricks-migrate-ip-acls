@@ -570,7 +570,7 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
       * disabled + 1+ rules → print the current config, offer to re-enable (interactively); either
         way exit so the migration re-runs against active rules;
       * enabled  + 0 rules  → nothing to migrate (exit);
-      * enabled  + 1+ rules → proceed.
+      * enabled  + 1+ rules → show the current config, then proceed.
     A read failure on the toggle (None) just warns and proceeds. All exits are clean (code 0)."""
     import sys
 
@@ -625,6 +625,9 @@ def _acl_ip_gate(analysis, wc, yes: bool) -> None:
         console.banner(
             "warn", "Couldn't read this workspace's IP access list enforcement state — " "proceeding."
         )
+    # Enforcement is on (or assumed on) and there are rules — show the current config before we
+    # proceed, so the table is always visible (not just in the disabled-toggle branch above).
+    render.acl_current_config(analysis, workspace_enabled=True)
 
 
 def _ensure_acl_policy_name_unique(cfg: AclConfig, account, workspace_id, yes: bool) -> None:
@@ -783,7 +786,6 @@ def _run_acl(cfg: AclConfig, conn: Connection, yes: bool) -> None:
     _note_policy_name(cfg.policy_name)
     _confirm_params(yes)
 
-    render.acl_analysis(analysis, cfg)
     _checkpoint(yes)
 
     preview = acl_core.preview_block(analysis, cfg, note=lambda m: console.banner("info", m))

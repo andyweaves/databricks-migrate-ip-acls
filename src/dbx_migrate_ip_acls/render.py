@@ -58,16 +58,6 @@ def acl_current_config(analysis, workspace_enabled: bool = False) -> None:
         _acl_table(rows, f"IP access lists on workspace {analysis.workspace_id}")
 
 
-def acl_analysis(analysis, cfg: AclConfig) -> None:
-    # The workspace toggle is on by the time we render this (the gate enabled it, or it already was),
-    # so label the enforcement state ENABLED to mirror acl_current_config's (DISABLED) gate view.
-    console.rule("Current IP access list configuration (ENABLED)")
-    if not analysis.ip_acls:
-        console.banner("warn", "No enabled IP access lists on this workspace — nothing to migrate.")
-        return
-    _acl_table(analysis.ip_acls, f"Enabled IP access lists on workspace {analysis.workspace_id}")
-
-
 def acl_disabled_notice(analysis) -> None:
     """Flag any individually-disabled IP access lists that won't be migrated, so the operator can
     vet them (the CLI then offers to re-enable and include them)."""
