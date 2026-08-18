@@ -758,8 +758,11 @@ def _reconcile_disabled_lists(analysis, cfg: AclConfig, wc, yes: bool):
 
     # Let the user pick exactly which disabled rules to re-enable + include (not all-or-nothing).
     chosen = questionary.checkbox(
-        "Select disabled rules to re-enable and include (space to toggle, enter to confirm):",
+        "Select disabled rules to re-enable and include:",
         choices=[a["label"] for a in analysis.disabled_acls],
+        # Override questionary's default hint to drop the confusing <i> (invert) and describe <a>
+        # as select-all. (The keys themselves are questionary built-ins; this just re-labels them.)
+        instruction="(Use arrow keys to move, <space> to select, <a> to select all, <enter> to confirm)",
     ).ask()
     if not chosen:  # none selected (or aborted) — migrate the currently-enabled lists as-is
         return analysis
