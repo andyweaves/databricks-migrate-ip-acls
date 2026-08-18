@@ -1,0 +1,52 @@
+[project]
+name = "databricks-migrate-ip-acls"
+version = "0.1.0"
+description = "Migrate a Databricks workspace's existing IP access list into a context-based ingress (CBI) account network policy, verbatim — a focused, review-gated CLI."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Andrew Weaver" }]
+keywords = ["databricks", "network-policy", "cbi", "ip-access-list", "security", "cli"]
+dependencies = [
+    # databricks-sdk >= 0.113.0 is required for the Context-Based Ingress (CBI) policy
+    # dataclasses (CustomerFacingIngressNetworkPolicy*).
+    "databricks-sdk>=0.113.0",
+    "typer>=0.12.0",
+    "rich>=13.7.0",
+    "questionary>=2.0.1",
+    "pandas>=2.0.0",
+    # Verify TLS against the OS trust store so corporate-proxy root CAs are honoured by the SDK
+    # (see src/dbx_migrate_ip_acls/tls.py).
+    "truststore>=0.9.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/andyweaves/databricks-migrate-ip-acls"
+Repository = "https://github.com/andyweaves/databricks-migrate-ip-acls"
+
+[project.scripts]
+dbx-migrate-ip-acls = "dbx_migrate_ip_acls.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+    "ruff>=0.6.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/dbx_migrate_ip_acls"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = ["B008"]  # typer uses function-call defaults (Option/Argument) by design
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

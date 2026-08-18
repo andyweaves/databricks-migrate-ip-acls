@@ -1,0 +1,174 @@
+# 🔁 Databricks Migrate IP ACLs
+
+Recreate a Databricks workspace's **existing IP access list** as a **context-based ingress (CBI)
+account network policy**, verbatim — `ALLOW` lists → allow rules, `BLOCK` lists → deny rules —
+with account-level pre-checks and a dry-run-first, review-gated apply path. **No traffic analysis,
+no enrichment, nothing added.**
+
+A single, focused CLI: **`dbx-migrate-ip-acls`**.
+
+> Looking for traffic-analysis-based ingress/egress policies (context-based ingress from audit-log
+> source IPs, serverless egress from observed outbound traffic, threat-intel / cloud enrichment,
+> identity/destination scoping)? Those live in the sibling tool
+> **[databricks-network-policy-helper](https://github.com/andyweaves/databricks-network-policy-helper)**
+> (`ingress` / `egress`). This repo was split out from it to maintain the IP-ACL migration on its own.
+
+## ⚠️ Warning
+
+A network policy is a **security-enforcing** control. This tool recreates your **current** IP access
+list as-is; it does not judge whether that ACL is correct or complete. You are responsible for
+reviewing every rule (and the disabled-rule notice) before applying — an incorrect or incomplete
+allow-list can block legitimate users (in enforce mode) or fail to block malicious ones. Trial with
+`--policy-mode dry_run` first if unsure.
+
+## 🚀 Quick start
+
+```bash
+uv sync
+
+# Propose-only (writes nothing): read the IP ACL and preview the CBI policy
+uv run dbx-migrate-ip-acls --profile my-workspace --account-id <acct-id> \
+    --no-create-policy --no-auto-assign
+
+# Migrate for real: create the policy (enforce) and bind this workspace to it
+uv run dbx-migrate-ip-acls --profile my-workspace --account-id <acct-id>
+```
+
+Or install the CLI on your PATH:
+
+```bash
+uv tool install .
+dbx-migrate-ip-acls --help
+```
+
+Auth is the Databricks SDK's unified auth (`--profile`, `DATABRICKS_*` env, or OAuth).
+**Account-admin credentials are always required** — the pre-checks and create/assign are all
+account-level (see *Account access* below).
+
+## 🗺️ How it flows
+
+```mermaid
+flowchart TD
+    A(["dbx-migrate-ip-acls"]) --> B{"Confirm target workspace?"}
+    B -->|no| X1["Abort — nothing written"]
+    B -->|yes| GATE{"enableIpAccessLists × rule count<br/>(read IP access lists up front)"}
+    GATE -->|"enabled + 0 rules"| X4["No rules — nothing to migrate, stop"]
+    GATE -->|"disabled + 0 rules"| X4
+    GATE -->|"disabled + rules → enable & continue"| REEN["Set enableIpAccessLists=true — continue"]
+    GATE -->|"disabled + rules → decline / --yes"| X6["Not active — nothing to migrate, stop"]
+    REEN --> PAS
+    GATE -->|"enabled + 1+ rules"| PAS{"PrivateLink? (PAS attached<br/>or workspace VPC endpoints > 0)"}
+    PAS -->|yes| X2["ABORT — not supported yet"]
+    PAS -->|no| AS0{"Will create AND assign?"}
+    AS0 -->|"yes: existing ENFORCED CBI policy"| X3["ABORT"]
+    AS0 -->|"yes: existing DRY-RUN CBI policy"| PROM["Warn; offer to promote to enforced, then stop"]
+    AS0 -->|"yes: none / allow-all"| NAME["Resolve policy name (prompt; blank = profile)<br/>must be unique — re-prompt if it exists"]
+    AS0 -->|"no: propose-only"| NAME
+    NAME --> RD["ALLOW → allow, BLOCK → deny (IPv4, ENABLED only)<br/>labels verbatim; disabled lists flagged, not migrated"]
+    RD --> P["Preview proposed policy + disabled-rule notice"]
+    P --> EXP{"--export?"}
+    EXP -->|yes| EXPW["Write JSON + Terraform"]
+    EXP -->|no| CR{"--create-policy? (default on)"}
+    EXPW --> CR
+    CR -->|"no (--no-create-policy)"| X5["Propose-only — nothing written"]
+    CR -->|yes| WMODE{"--policy-mode"}
+    WMODE -->|enforce| WE["Create ingress (blocking)<br/>+ FULL_ACCESS egress"]
+    WMODE -->|dry_run| WD["Create ingress_dry_run (log-only)<br/>+ FULL_ACCESS egress"]
+    WE --> AS{"--auto-assign? (default on)"}
+    WD --> AS
+    AS -->|no| DONE(["Done"])
+    AS -->|yes| ASB["Bind workspace to policy"]
+    ASB --> DIS{"--disable-existing-ip-acls?"}
+    DIS -->|no| DONE
+    DIS -->|yes| DISB["Set enableIpAccessLists=false"]
+    DISB --> DONE
+    classDef stop fill:#f8d7da,stroke:#b02a37,color:#111
+    classDef done fill:#e2e3e5,stroke:#6c757d,color:#111
+    classDef write fill:#d1e7dd,stroke:#146c43,color:#111
+    classDef warn fill:#fff3cd,stroke:#997404,color:#111
+    class X2,X3 stop
+    class X1,X4,X5,X6,DONE done
+    class WD,WE,ASB,DISB write
+    class PROM,REEN warn
+```
+
+## 🧰 What it does
+
+1. **Right after the workspace is chosen**, decides whether there's anything to migrate, from the
+   workspace-wide `enableIpAccessLists` toggle × the number of IP access lists:
+   - **disabled + 0 rules** → nothing to migrate → exit.
+   - **disabled + 1+ rules** → the rules aren't in effect. It prints the current IP-ACL config and
+     (interactively) offers to **enable** them: **yes** → sets `enableIpAccessLists=true` and
+     **continues** in the same run; **no** → exits. `--yes` never auto-flips the toggle.
+   - **enabled + 0 rules** → nothing to migrate → exit.
+   - **enabled + 1+ rules** → proceed. (Unreadable toggle → warn + proceed.)
+2. Reads the workspace's IP access lists (`w.ip_access_lists.list()`). **Individual lists that are
+   disabled are flagged and NOT migrated** — only enabled lists are; the disabled ones are called
+   out in the final printout so you can vet them. Maps **ALLOW → allow rules**, **BLOCK → deny
+   rules** (IPv4 only; CBI is IPv4-only), recreating each rule **verbatim** — the original ACL
+   label, no prefix, no mode suffix. The one thing it adds: if the ACL has **only BLOCK lists**, a
+   catch-all allow (all public IPs) is added, because CBI RESTRICTED_ACCESS is default-deny —
+   without it a deny-only policy would block everything.
+3. Runs account-level **pre-checks**: aborts on **PrivateLink** (a PAS object attached, or ≥1
+   registered VPC endpoint for this workspace — not supported yet); and, only when the run will
+   **assign** the new policy, guards an existing **restrictive** CBI ingress policy already bound to
+   the workspace (enforced → abort; dry-run → offer to promote it to enforced, then stop). An
+   allow-all policy such as the account's baseline `default-policy` is ignored.
+4. Names the new policy from `--policy-name` (or prompts; blank = the profile name). It only
+   **creates new** policies, so a name that already exists re-prompts (or aborts non-interactively).
+   `--create-policy` is **on by default** (a review gate still confirms); with `--auto-assign`
+   (default on) it binds the current workspace.
+5. With `--disable-existing-ip-acls` (off by default), after the policy is created **and** assigned,
+   turns off the workspace's IP access list enforcement (`enableIpAccessLists=false`) so the old ACL
+   and the new CBI policy don't both apply. The lists themselves are preserved (reversible).
+
+> This tool deliberately does **not** enrich, auto-allow Databricks' own control-plane IPs, or touch
+> egress: the created policy carries a permissive `FULL_ACCESS` egress. It assumes the existing ACL
+> is what you want.
+
+## ⚙️ Options
+
+| Option | Meaning |
+|---|---|
+| `--profile` | Databricks CLI/config profile. Prompted if omitted (never guessed). |
+| `--policy-mode enforce\|dry_run` | `enforce` (default) blocks non-matching source IPs once assigned; `dry_run` is log-only. |
+| `--policy-name` | The new policy's id. If omitted you're prompted (blank there = the profile name, falling back to the workspace id). Normalised to a lowercase, `-`-safe id, capped at 30 chars. |
+| `--export <path>` | Write the proposed policy JSON **and** a sibling best-effort Terraform `.tf` (`databricks_account_network_policy` — review before `terraform apply`). A directory writes `<policy-id>.{json,tf}` inside it (use `--export .` for the current dir); missing parents are created. Works in propose-only mode too. |
+| `--auto-assign` / `--no-auto-assign` | Bind the current workspace to the new policy (default **on**). |
+| `--create-policy` / `--no-create-policy` | Master write switch. **On by default** (a review gate still confirms). For a propose-only run: `--no-create-policy --no-auto-assign`. |
+| `--disable-existing-ip-acls` | After create **and** assign, turn off the workspace's IP access lists. Requires create + assign **and** `--policy-mode enforce`. Off by default. |
+| `--account-id` (+ account-admin creds) | **Always required** — pre-checks and create/assign are account-level. |
+| `--account-host`, `--account-profile` | Account API host / a dedicated profile for account-level calls. |
+| `--yes`, `-y` | Non-interactive: skip the step-through pauses and the review/write gate. `--yes` **will** create + assign. |
+
+**Invalid flag combinations** (rejected up front): `--no-create-policy` with `--auto-assign`
+(nothing to bind); `--disable-existing-ip-acls` without both create + assign, or with `--policy-mode
+dry_run` (both would leave the workspace with no enforced ingress control).
+
+## 🔒 Account access
+
+Every run is account-level: the pre-checks (PrivateLink / existing assigned policy) read account
+APIs, and create/assign write them. Pass `--account-id <numeric id>` with **account-admin**
+credentials resolvable by unified auth for the account host (an account-admin service principal via
+OAuth M2M is the recommended path). A workspace-only OAuth session **cannot** call the account API —
+use `--account-profile` (or env) for account creds if your workspace profile can't.
+
+## 🗂️ Repo layout
+
+| Path | What |
+|---|---|
+| `src/dbx_migrate_ip_acls/cli.py` | The Typer CLI (single command) + interactive gates. |
+| `src/dbx_migrate_ip_acls/acl.py` | The migration engine + network-policy state queries. |
+| `src/dbx_migrate_ip_acls/policy.py` | SDK dataclass builders + policy-id naming. |
+| `src/dbx_migrate_ip_acls/terraform.py` | Best-effort Terraform (HCL) rendering of the proposed policy. |
+| `src/dbx_migrate_ip_acls/{config,auth,console,render,tls}.py` | Config/validation, auth, Rich UI, presentation, OS-trust-store TLS. |
+| `tests/` | Offline unit tests (fakes/monkeypatch — no network). |
+
+## 🧪 Development & tests
+
+```bash
+uv run pytest -q
+uv run ruff check src/ tests/
+```
+
+Tests are fully offline (SDK clients and workspace/account reads are faked or monkeypatched).
