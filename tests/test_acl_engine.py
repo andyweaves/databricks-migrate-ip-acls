@@ -407,17 +407,17 @@ def test_enable_disabled_lists_enables_only_matching_disabled():
     acls = [
         _EnableAcl("1", "office", True),
         _EnableAcl("2", "vpn", False),
-        _EnableAcl("3", "Veuve_IPs", False),
+        _EnableAcl("3", "corp-vpn", False),
     ]
     seen = []
 
     def _update(self, ip_access_list_id, label, list_type, ip_addresses, enabled):
         seen.append((label, enabled))
 
-    n, failures = acl_core.enable_disabled_lists(_enable_ws(acls, _update), ["vpn", "Veuve_IPs", "not-there"])
+    n, failures = acl_core.enable_disabled_lists(_enable_ws(acls, _update), ["vpn", "corp-vpn", "not-there"])
     assert n == 2 and failures == []
     # office is already enabled and "not-there" doesn't exist -> only the two disabled ones updated
-    assert sorted(label for label, _ in seen) == ["Veuve_IPs", "vpn"]
+    assert sorted(label for label, _ in seen) == ["corp-vpn", "vpn"]
     assert all(enabled is True for _, enabled in seen)
 
 

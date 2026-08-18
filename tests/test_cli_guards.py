@@ -962,7 +962,7 @@ def test_reconcile_noninteractive_flags_but_never_enables(monkeypatch, capsys):
         "dbx_migrate_ip_acls.acl.enable_disabled_lists",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not enable non-interactively")),
     )
-    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
+    a = types.SimpleNamespace(disabled_acls=[{"label": "corp-vpn"}])
     out = cli._reconcile_disabled_lists(a, AclConfig(create_policy=True), object(), yes=True)
     assert out is a
     assert "WILL NOT be migrated" in capsys.readouterr().out
@@ -984,7 +984,7 @@ def test_reconcile_select_none_does_not_enable(monkeypatch):
         "dbx_migrate_ip_acls.acl.enable_disabled_lists",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("none selected -> must not enable")),
     )
-    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
+    a = types.SimpleNamespace(disabled_acls=[{"label": "corp-vpn"}])
     assert cli._reconcile_disabled_lists(a, AclConfig(create_policy=True), object(), yes=False) is a
 
 
@@ -995,18 +995,18 @@ def test_reconcile_enables_only_the_selected_subset_and_reanalyzes(monkeypatch):
 
     fresh = types.SimpleNamespace(disabled_acls=[], allow_specs=[{"cidrs": ["8.8.8.8/32"]}])
     monkeypatch.setattr("sys.stdin.isatty", lambda: True)
-    # user ticks only "Veuve_IPs" out of the two disabled lists
-    monkeypatch.setattr("questionary.checkbox", lambda *a, **k: _fake_checkbox(["Veuve_IPs"]))
+    # user ticks only "corp-vpn" out of the two disabled lists
+    monkeypatch.setattr("questionary.checkbox", lambda *a, **k: _fake_checkbox(["corp-vpn"]))
     seen = {}
     monkeypatch.setattr(
         "dbx_migrate_ip_acls.acl.enable_disabled_lists",
         lambda wc, labels: (seen.update(labels=labels) or (len(labels), [])),
     )
     monkeypatch.setattr("dbx_migrate_ip_acls.acl.analyze", lambda cfg, wc: fresh)
-    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}, {"label": "office"}])
+    a = types.SimpleNamespace(disabled_acls=[{"label": "corp-vpn"}, {"label": "office"}])
     out = cli._reconcile_disabled_lists(a, AclConfig(create_policy=True), object(), yes=False)
     assert out is fresh  # re-read analysis folds in the selected list
-    assert seen["labels"] == ["Veuve_IPs"]  # only the ticked subset is enabled, not all
+    assert seen["labels"] == ["corp-vpn"]  # only the ticked subset is enabled, not all
 
 
 # --- propose-only runs must not offer/perform re-enables (no writes) ---------------------------
@@ -1042,7 +1042,7 @@ def test_reconcile_propose_only_flags_but_does_not_offer(monkeypatch, capsys):
         "dbx_migrate_ip_acls.acl.enable_disabled_lists",
         lambda *a, **k: (_ for _ in ()).throw(AssertionError("propose-only must not enable")),
     )
-    a = types.SimpleNamespace(disabled_acls=[{"label": "Veuve_IPs"}])
+    a = types.SimpleNamespace(disabled_acls=[{"label": "corp-vpn"}])
     out = cli._reconcile_disabled_lists(a, AclConfig(create_policy=False), object(), yes=False)
     assert out is a
     o = capsys.readouterr().out.lower()
