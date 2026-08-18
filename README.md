@@ -3,15 +3,13 @@
 [![CI](https://github.com/andyweaves/databricks-migrate-ip-acls/actions/workflows/ci.yml/badge.svg)](https://github.com/andyweaves/databricks-migrate-ip-acls/actions/workflows/ci.yml)
 [![codecov](https://codecov.io/gh/andyweaves/databricks-migrate-ip-acls/branch/main/graph/badge.svg)](https://codecov.io/gh/andyweaves/databricks-migrate-ip-acls)
 
-Recreate a Databricks workspace's **existing IP access list** as a **context-based ingress (CBI)
+Recreate a Databricks workspace's **existing IP access list** as a **context-based ingress (CBI) via a single, focused CLI: **`dbx-migrate-ip-acls`**.
 account network policy**
 > 💡 Looking for traffic-analysis-based ingress/egress policies (context-based ingress from audit-log
 > source IPs, serverless egress from observed outbound traffic, threat-intel / cloud enrichment,
 > identity/destination scoping)? Those live in the sibling tool
 > **[databricks-network-policy-helper](https://github.com/andyweaves/databricks-network-policy-helper)**
 > (`ingress` / `egress`). 
-
-A single, focused CLI: **`dbx-migrate-ip-acls`**.
 
 ## ⚠️ Warning
 
